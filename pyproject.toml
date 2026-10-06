@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "System 1 / System 2 router: Laya decision model on CPU + LangGraph agent, streaming with Quix Streams."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["routercore"]
+dependencies = ["routercore", "judgekit"]
 
 [tool.uv]
 package = false
@@ -14,6 +14,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 routercore = { workspace = true }
+judgekit = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
@@ -26,7 +27,7 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["routercore"]
+known-first-party = ["routercore", "judgekit"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/routercore/tests", "tests"]
+testpaths = ["packages/routercore/tests", "packages/judgekit/tests", "tests"]
