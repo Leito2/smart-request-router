@@ -1,0 +1,7 @@
+# Placeholder until calibration (M3): thresholds are chosen on the risk–coverage curve.
+threshold_set: v0-placeholder
+tau: 0.80
+margin: 0.15
+tau_urgent: 0.15
+max_entropy: 0.85
+temperatures: {}        # per language and question, fitted on validation data

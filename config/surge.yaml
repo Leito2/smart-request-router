@@ -1,0 +1,5 @@
+window_s: 60
+ewma_alpha: 0.2
+z_threshold: 4
+consecutive_windows: 2
+warmup_windows: 10

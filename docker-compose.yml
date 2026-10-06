@@ -1,0 +1,47 @@
+# Profiles (PLAN.md §7): core | agent | ops   — eval-judge and train run without the streaming stack.
+x-core: &core
+  profiles: ["core", "agent", "ops"]
+
+services:
+  redpanda:
+    <<: *core
+    image: redpandadata/redpanda:latest      # pin in M4
+    command: ["redpanda", "start", "--smp", "1", "--memory", "512M", "--overprovisioned",
+              "--node-id", "0", "--check=false",
+              "--kafka-addr", "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092",
+              "--advertise-kafka-addr", "INTERNAL://redpanda:29092,EXTERNAL://localhost:9092"]
+    ports: ["9092:9092"]
+    mem_limit: 700m
+
+  redis:
+    <<: *core
+    image: redis:8
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb"]
+    ports: ["6379:6379"]
+    mem_limit: 150m
+
+  postgres:
+    <<: *core
+    image: postgres:17
+    environment: { POSTGRES_DB: router, POSTGRES_USER: router, POSTGRES_PASSWORD: router }
+    volumes: ["./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"]
+    ports: ["5432:5432"]
+    mem_limit: 250m
+
+  llm-gateway:
+    profiles: ["agent", "ops"]
+    build: ../llm-gateway                   # P0 — shared Python gateway
+    env_file: ../llm-gateway/.env.example
+    environment: { GW_REDIS_URL: "redis://redis:6379/1" }
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    mem_limit: 400m
+
+  grafana:
+    profiles: ["ops"]
+    image: grafana/grafana:latest           # pin in M6
+    environment: { GF_AUTH_ANONYMOUS_ENABLED: "true", GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer }
+    volumes: ["./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"]
+    ports: ["3000:3000"]
+    mem_limit: 150m
+
+  # App services (replayer, dataflow [Quix Streams], system2, dispatcher, api, mocks) arrive in M4–M5.

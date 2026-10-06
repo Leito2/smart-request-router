@@ -1,0 +1,14 @@
+# ~12 routes (Laya collapses with >20 options — course 06/34 note 03). Banking77 intents map onto these in M1.
+routes:
+  disputes:   "duplicate or wrong charges, refunds, chargebacks"
+  cards:      "card blocked, lost, activation, PIN, limits"
+  security:   "fraud, stolen card, account takeover, suspicious activity"
+  transfers:  "transfer delays, failed transfers, beneficiaries"
+  fees:       "fees, commissions, exchange rates"
+  topup:      "top-ups, deposits, cash withdrawals"
+  kyc:        "identity verification, documents, account opening"
+  account:    "personal details, closing account, statements"
+  payments:   "card payments, pending payments, declined payments"
+  fraud_inquiry: "questions about a blocked or flagged payment (→ P1 decisions API)"
+  knowledge:  "how-to and product questions answerable from the help center (→ P3 RAG)"
+  general:    "greetings, thanks, anything else"
