@@ -2,7 +2,7 @@
 
 > **Plan de proyecto** (vive en este repo como `PLAN.md`). **Estado:** ✅ Plan completo (11/11 módulos), listo para implementar en la fase F5 del plan de Learning.
 > Stack: Laya (decision model, CPU) · Quix Streams · Kafka/Redpanda · LangGraph (agente System 2) · LLM local vía LLM Gateway (`llm-gateway`, Python) · Hugging Face + PyTorch (fine-tune) · Redis · MLflow · Langfuse · FastAPI · Docker Compose
-> **v2 (evaluación industrial, §12):** `judgekit` (asyncio · aiohttp · Pandas · HF Evaluate/Tokenizers) · Gemma 4 31B *golden evaluator* · Langfuse (datasets, experiments, prompt management) · SageMaker Processing (modo local) + MinIO/S3 · KFP v2 (`kfp.local` → Vertex AI Pipelines) · Evidently · Presidio
+> **v2 (evaluación industrial, §12):** `judgekit` (asyncio · aiohttp · Pandas · HF Evaluate/Tokenizers) · Gemma 4 31B *golden evaluator* · Langfuse (datasets, experiments, prompt management) · jobs batch en contenedor + MinIO/S3 · KFP v2 (`kfp.local` → Vertex AI Pipelines) · Evidently · Presidio
 > Gasto: **$0** (todo local; Langfuse Cloud free opcional).
 
 ## Módulos del plan
@@ -541,7 +541,7 @@ smart-request-router/
 | **M5 · System 2** | Agente LangGraph + herramientas + guardrails + Langfuse | B5 evaluado; System 2 **supera** a Laya en los escalados (si no, se documenta y se simplifica) | System 2 Agent | C7 (05) | L |
 | **M6 · Oleadas + observabilidad** | Detector EWMA + `alerts` + dashboards R1–R4 + alertas | `make surge-demo` detecta la oleada en < 2 min; GIF grabado | Surge Detection, Observability | C6 | M |
 | **M7 · Calidad continua** | Juez validado (kappa), compuertas en la CI, drift, lazo de feedback | Kappa reportado; un PR con regresión falla en la CI (demostrado); reentrenamiento con feedback | LLM-as-a-Judge, Regression Gates, Improvement Loop | — | M |
-| **M7b · Evaluación industrial** (§12) | Jueces de `judgekit` (rúbrica, pairwise, claims, seguridad y marca), panel con `judge_golden`, Langfuse (datasets, experiments, prompts, anotación), SageMaker Processing local + MinIO versionado, pipeline KFP `quality-loop` local, Evidently | Kappa de ambos jueces reportado; un *processing job* local produce el reporte desde MinIO; el pipeline reentrena o re-promptea ante una degradación inyectada; % de QA ahorrado medido | LLM-as-a-Judge, Industrial Evaluation, Quality Loop | — | L |
+| **M7b · Evaluación industrial** (§12) | Jueces de `judgekit` (rúbrica, pairwise, claims, seguridad y marca), panel con `judge_golden`, Langfuse (datasets, experiments, prompts, anotación), job batch en contenedor sobre MinIO versionado, pipeline KFP `quality-loop` local, Evidently | Kappa de ambos jueces reportado; el job batch produce el reporte desde MinIO; el pipeline reentrena o re-promptea ante una degradación inyectada; % de QA ahorrado medido | LLM-as-a-Judge, Industrial Evaluation, Quality Loop | — | L |
 | **M8 · Integraciones** | Contratos reales con P1 (`/decisions`) y P3 (`/ask`) | Con P1/P3 levantados, el dispatcher los usa; sin ellos, los mocks | Integrations | — | S |
 | **M9 · Pulido y publicación** | README completo, checkpoint en HF Hub, Space opcional, `v1.0` | Una persona ajena lo corre desde el README | Todo | — | M |
 | M10 · `⏳ 16GB` | Langfuse self-hosted, B4 con un modelo de 4B, todo simultáneo | Resultados `v1.1` | Results | — | S |
@@ -578,14 +578,14 @@ Langfuse self-hosted · baseline B4 con un modelo de 4B en simultáneo · todos 
 ### 11.4 Preguntas abiertas
 1. ~~¿El gateway soporta salida estructurada?~~ → **resuelto:** `llm-gateway` implementa `response_format` con JSON Schema, validación y un reintento (su hito M7).
 2. ~~¿Nombre del repo `smart-request-router`?~~ → **resuelto:** repo público `Leito2/smart-request-router`.
-3. ¿Una corrida opcional en AWS real (SageMaker Processing + S3, centavos) como prueba final de `judgekit`? (ver §12.6)
+3. ~~¿Una corrida opcional en AWS real?~~ → **resuelto (2026-10-06):** todo local y **sin SageMaker**; los jobs de evaluación son contenedores propios orquestados con KFP local.
 
 
 ---
 
 ## 12. v2 — Evaluación industrial: `judgekit` (absorbe el proyecto "Automated LLM Evaluation Suite" del CV)
 
-> **Decisión (2026-10-06):** el proyecto del CV *Enterprise MLOps: Automated LLM Evaluation Suite* no tiene repo y queda aparte. **Todo** lo que describe (asyncio + aiohttp + Pandas, SageMaker Processing sobre S3, Vertex AI Pipelines, Model Monitor, Gemma 4 31B como *golden evaluator*, Hugging Face Evaluate y tokenizers, algoritmos de token matching, auditoría de alucinaciones, compuertas de calidad) se implementa aquí como componente real, mejorado con **Langfuse**. P2 es su casa porque ya tiene el harness más completo; P1, P3 y P4 lo consumen como librería.
+> **Decisión (2026-10-06):** el proyecto del CV *Enterprise MLOps: Automated LLM Evaluation Suite* no tiene repo y queda aparte. **Todo** lo que describe (asyncio + aiohttp + Pandas, evaluación distribuida sobre S3, Vertex AI Pipelines, monitoreo de modelos, Gemma 4 31B como *golden evaluator*, Hugging Face Evaluate y tokenizers, algoritmos de token matching, auditoría de alucinaciones, compuertas de calidad) se implementa aquí como componente real, mejorado con **Langfuse**. P2 es su casa porque ya tiene el harness más completo; P1, P3 y P4 lo consumen como librería.
 
 ### 12.1 Mapa de absorción
 | Elemento del proyecto del CV | Cómo existe en P2 | Costo |
@@ -599,9 +599,9 @@ Langfuse self-hosted · baseline B4 con un modelo de 4B en simultáneo · todos 
 | Auditoría de alucinaciones | El `rationale` del agente System 2 se descompone en afirmaciones y cada una se verifica contra las salidas de sus herramientas (historial, decisiones de P1, KB de P3); métrica `unsupported_claim_rate` | $0 |
 | Benchmarking de alineamiento, seguridad y marca | Rúbricas versionadas: tono de marca (guía de estilo de soporte fintech), seguridad (sin asesoría financiera, sin filtrar PII, sin prometer reembolsos), cumplimiento de la política de escalamiento | $0 |
 | Gating "listo para producción" | `judgekit gate`: umbrales en YAML → código de salida; corre en la CI (subset con `mock`) y antes de promover un modelo o un prompt | $0 |
-| **SageMaker Processing Jobs** sobre datasets versionados en **S3** | El runner se empaqueta como contenedor y se ejecuta como *Processing Job* en **modo local** del SDK de SageMaker (corre en Docker) leyendo de **MinIO** (API S3, *object versioning* activado). El mismo job corre en SageMaker real cambiando la sesión (opcional, ver §12.6) | $0 local |
+| Jobs de evaluación distribuida sobre datasets versionados en **S3** | El runner se empaqueta como contenedor y corre como **componente KFP** (`kfp.local`, `DockerRunner`) o con `docker run`, leyendo de **MinIO** (API S3, *object versioning* activado) y escribiendo los reportes de vuelta. **Sin SageMaker** (decisión del usuario): mismo patrón de *processing job*, infraestructura propia | $0 |
 | **Vertex AI Pipelines** que disparan reentrenamiento o *prompt tuning* | Pipeline KFP v2 `quality-loop`: evaluar → comparar con umbrales → si se degrada, **reentrenar Laya** (LoRA con el feedback) u **optimizar el prompt** del System 2 (búsqueda de variantes evaluadas por `judgekit`) → registrar en MLflow → compuerta. Corre local con `kfp.local` (`DockerRunner`); el YAML compilado es el mismo que se ejecuta en Vertex AI Pipelines durante la prueba final de P3 (único proyecto en GCP) | $0 local |
-| **SageMaker Model Monitor** (drift semántico, observabilidad) | **Evidently**: drift de la distribución de intenciones, de la confianza y **drift semántico de embeddings** de los mensajes; reportes y *test suites*; se documenta la equivalencia con Model Monitor (baseline → constraints → schedule → violations) | $0 |
+| Monitoreo de modelos (drift semántico, observabilidad) | **Evidently**: drift de la distribución de intenciones, de la confianza y **drift semántico de embeddings** de los mensajes; reportes y *test suites* programados con cron local | $0 |
 | Gobernanza de datos | *Dataset cards*, manifiesto con hash de contenido por versión, linaje en MLflow (digest del dataset en cada corrida), escaneo de PII con Presidio antes de que un dato entre a un dataset, retención documentada | $0 |
 | "Reduce el QA manual hasta 90%" | Se **mide**: tiempo humano por caso (cronometrado al etiquetar el set de kappa) × casos vs tiempo del runner; se publica el % real | $0 |
 
@@ -644,13 +644,13 @@ packages/judgekit/
 | Tiempo desde que se degrada una métrica hasta que el pipeline propone un candidato | Se reporta |
 
 ### 12.5 Frase del CV (agregado)
-> … with an async **LLM-as-a-Judge** framework (asyncio · aiohttp · Pandas · HF Evaluate) validated against human labels (κ {k}), a **Gemma 4 31B golden evaluator**, Langfuse datasets/experiments, SageMaker Processing jobs over versioned S3 datasets and a KFP/Vertex AI quality loop that retrains or re-prompts on degradation — **{q}% less manual QA time**.
+> … with an async **LLM-as-a-Judge** framework (asyncio · aiohttp · Pandas · HF Evaluate) validated against human labels (κ {k}), a **Gemma 4 31B golden evaluator**, Langfuse datasets/experiments, containerized evaluation jobs over versioned S3-compatible datasets and a KFP/Vertex AI quality loop that retrains or re-prompts on degradation — **{q}% less manual QA time**.
 
 ### 12.6 Decisiones pendientes y riesgos
 | Tema | Decisión / mitigación |
 |---|---|
-| ¿Correr una vez en **AWS real** (SageMaker Processing + S3)? | **Pendiente del usuario.** Por defecto todo es local ($0). Una corrida real de pocos minutos en una instancia pequeña cuesta centavos, pero rompe la regla de "un solo proyecto en la nube"; se propone como prueba final opcional |
-| El modo local de SageMaker en Windows | Correrlo dentro de WSL2; verificar al implementar el soporte de `LocalSession` con un endpoint S3 personalizado (MinIO) |
+| AWS / SageMaker | **Resuelto:** no se usa SageMaker ni AWS; todo corre local con contenedores propios, MinIO (API S3) y KFP local |
+| `kfp.local` con `DockerRunner` en Windows | Correrlo con Docker Desktop (WSL2); plan B: `SubprocessRunner` para los componentes livianos |
 | Cuotas del free tier de Google AI Studio para `judge_golden` | Solo subsets de validación (cientos de casos, no miles); el gateway respeta las cuotas (P0 §4) |
 | Términos de uso de los free tiers | Solo datos sintéticos o públicos (Banking77) |
 | Scope creep | `judgekit` v1 = métricas deterministas + runner + reporte; los jueces, Langfuse y los pipelines llegan en M7b |
