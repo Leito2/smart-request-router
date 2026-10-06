@@ -14,6 +14,12 @@ System One AI (Learning vault 06/34).
 ### 2. Core Concepts Primer
 Decision models vs classifiers vs LLMs · calibration & ECE · selective classification · System 1/System 2 cascades ·
 agents with tools · stream processing in Python
+### Key technologies at a glance
+- **Decision model (Laya)** — answers routing questions with calibrated probabilities in one fast pass on CPU.
+- **System 1 / System 2** — the cheap model handles most messages; an LLM agent only takes the uncertain ones.
+- **Quix Streams** — stream processing in Python for context and surge detection.
+- **LangGraph agent** — investigates hard cases with tools.
+- **LLM-as-a-Judge (`judgekit`) + Langfuse** — automated quality checks, validated against human labels.
 ### 3. The System 1 / System 2 Thesis · 4. Architecture · 5. Design Decisions · 6. Journey of a Message
 ## Part II — Components (Concept → How it works here → Technical details)
 ## Part III — The Model (data, baselines, fine-tuning on 4 GB, calibration, thresholds, improvement loop)
