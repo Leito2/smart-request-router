@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: uv sync --all-packages --dev
+        run: uv sync --all-packages --dev --locked
       - name: Lint
         run: uv run ruff check .
       - name: Architecture (dependency rule)

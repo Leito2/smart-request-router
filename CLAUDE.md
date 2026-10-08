@@ -24,6 +24,8 @@ make up PROFILE=core|agent|ops     # docker compose profiles; `make down` stops 
 uv run judgekit gate <rules.yaml> <metrics.json>   # quality gate CLI (exit 1 on failure)
 ```
 
+`uv.lock` is committed and CI installs with `uv sync --locked`, so any dependency change in a `pyproject.toml` must ship with the regenerated `uv.lock` (`uv lock`) or CI fails at install.
+
 `make data|train|calibrate|eval|eval-full|smoke|surge-demo` are deliberate stubs that exit 1 until their milestone (PLAN §10) lands. Ruff: line length 110, rules `E,F,I,UP,B`. pytest `testpaths` are the two package test dirs plus top-level `tests/`.
 
 ## Architecture
