@@ -17,5 +17,7 @@ jobs:
         run: uv sync --all-packages --dev
       - name: Lint
         run: uv run ruff check .
+      - name: Architecture (dependency rule)
+        run: uv run lint-imports
       - name: Test
         run: uv run pytest -q

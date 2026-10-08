@@ -149,7 +149,7 @@ Secciones **Overview**, **The Problem**, **The System 1 / System 2 Thesis**, **W
 
 **ADR-4 · Costo asimétrico de errores.** Mandar un robo de tarjeta a "FAQ" es mucho peor que mandar una FAQ a un humano. Por eso hay una **red de seguridad de urgencia**: si P(urgente) supera un umbral **bajo** (p. ej., 0.15), se escala aunque la intención principal tenga confianza alta.
 
-**ADR-5 · Una pasada, varias preguntas.** Laya responde en **la misma pasada** cuatro preguntas: `intent` (las 77 de Banking77 mapeadas a ~12 rutas), `urgency` (low/medium/high/critical), `needs_human` (sí/no) y `needs_kb` (sí/no). Es la ventaja distintiva de los decision models frente a un clasificador clásico, que necesitaría cuatro modelos o cuatro cabezas.
+**ADR-5 · Una pasada, varias preguntas.** Laya responde en **la misma pasada** cuatro preguntas: `intent` (las 77 de Banking77 mapeadas a ~12 rutas), `urgency` (`"0"`–`"3"`, de baja a crítica; la más probable fija la prioridad `low`/`normal`/`high`/`critical`, y la red de seguridad usa P(`"2"`) + P(`"3"`)), `needs_human` (sí/no) y `needs_kb` (sí/no). Es la ventaja distintiva de los decision models frente a un clasificador clásico, que necesitaría cuatro modelos o cuatro cabezas.
 
 **ADR-6 · Redpanda en lugar de Kafka.** Es compatible con la API de Kafka, no tiene JVM y usa ~500 MB de RAM. P1 ya demuestra Kafka; P2 demuestra la alternativa ligera, y el código no cambia.
 
@@ -174,13 +174,14 @@ Secciones **Overview**, **The Problem**, **The System 1 / System 2 Thesis**, **W
 // routed
 { "message_id": "…", "route": "disputes", "priority": "high",
   "decided_by": "system1", "confidence": 0.93,
-  "laya": { "intent": {"duplicate_charge": 0.93, "…": 0.02},
-            "urgency": {"high": 0.71, "…": 0.1}, "needs_human": {"yes": 0.88},
-            "needs_kb": {"no": 0.9} },
   "model_version": "laya-ft-3", "threshold_set": "v2", "ts_routed_ns": 0 }
 
-// escalations
-{ …inbound, "laya": {…}, "reason": "low_confidence | multi_intent | urgency_safety_net | ood" }
+// escalations (las probabilidades de Laya viajan solo aquí, para el System 2)
+{ "message": {…inbound},
+  "laya": { "intent": {"disputes": 0.48, "cards": 0.44, "…": 0.08},
+            "urgency": {"0": 0.7, "1": 0.25, "2": 0.04, "3": 0.01},
+            "needs_human": {"yes": 0.88, "no": 0.12}, "needs_kb": {"no": 0.9, "yes": 0.1} },
+  "reason": "low_confidence | multi_intent | urgency_safety_net | ood" }
 ```
 
 ### 2.5 El viaje de un mensaje
@@ -220,20 +221,22 @@ Secciones **Overview**, **The Problem**, **The System 1 / System 2 Thesis**, **W
 **🔧** Quix Streams (`Application` + `StreamingDataFrame`): estado por cliente en RocksDB local respaldado por changelog topics en Redpanda; ventanas `tumbling_window`/`sliding_window` con `.current()` para emitir por evento. Uno o dos procesos en el mismo consumer group según la CPU (≤ particiones). El modelo se carga **una vez por proceso**. Métricas de Prometheus expuestas desde el proceso.
 **🔁** Quix Streams o Faust (Python). Flink (P1) o Spark (P3). Se comparan en el curso C2.
 
-### 3.4 Laya — System 1 (`packages/routercore/laya.py`)
+### 3.4 Laya — System 1 (adaptador en `routercore/adapters/`, detrás del puerto `DecisionModel`; ADR-0002)
 **🧠** Un **decision model**: recibe un estado (el texto y su contexto) y un conjunto de **preguntas con opciones cerradas**, y devuelve una **distribución de probabilidad por pregunta** en una sola pasada, sin generar texto. Está basado en encoders ModernBERT/mmBERT (322M multilingüe), así que es rápido en CPU.
 **⚙️** Se usa la variante **multilingüe (322M)** fine-tuneada con nuestras rutas (§4). En inferencia se exporta a **ONNX con cuantización int8 dinámica** para la CPU, y se mide la pérdida de calidad.
 **🔧** Hugging Face + Optimum para el export. ONNX Runtime con `intra_op_num_threads` ajustado al i5 (4C/8T). Longitud máxima de 128 tokens (los mensajes de soporte son cortos).
 **🔁** Von (395M, OpenVINO en CPU), Kev 0.8B (GPU, API compatible con Jev), SetFit y ModernBERT fine-tuneado como clasificador clásico. Están en la comparativa del curso C7, y algunas en los baselines de §4.
 
-### 3.5 Política de decisión (`packages/routercore/policy.py`)
+### 3.5 Política de decisión (`routercore/domain/policy.py`)
 **🧠** Convierte probabilidades en acciones. Es **clasificación selectiva**: el modelo puede **abstenerse** cuando duda, y eso es una ventaja, no un fallo.
 **⚙️** Reglas en orden:
-1. Red de seguridad de urgencia (ADR-4).
-2. Si `max P(intent) < τ_intent` → `low_confidence`.
+1. Red de seguridad de urgencia (ADR-4): P(`"2"`) + P(`"3"`) > `τ_urgent` → `urgency_safety_net`.
+2. Si el idioma no está soportado o se detecta un mensaje fuera de dominio (entropía normalizada > `max_entropy`) → `ood`.
 3. Si las dos intenciones más probables están cerca (margen < m) → `multi_intent`.
-4. Si se detecta un mensaje fuera de dominio (entropía alta) → `ood`.
+4. Si `max P(intent) < τ` → `low_confidence`.
 5. Si no se cumple nada de lo anterior, la decisión es de System 1.
+
+El orden importa: la primera regla que se cumple da la razón del escalamiento.
 
 **🔧** Los umbrales (`τ`, `m`) se eligen en validación con la **curva riesgo-cobertura** (§4.5) y se guardan en `policy.yaml` (versionado).
 **🔁** Un solo umbral global (más simple y peor). Conformal prediction (garantías estadísticas de cobertura); queda como mejora documentada.
@@ -492,7 +495,7 @@ make smoke                        # 50 msg/s durante 2 min → cobertura de S1, 
 ```
 smart-request-router/
 ├── README.md · LICENSE · Makefile · docker-compose.yml (profiles) · .env.example · pyproject.toml (uv)
-├── packages/routercore/          ← compartido: laya.py, policy.py, contracts.py, route_map, telemetry
+├── packages/routercore/          ← núcleo Clean Architecture (ADR-0002): domain/ · application/ · adapters/
 ├── services/
 │   ├── replayer/ · dataflow/ · system2/ · dispatcher/ · api/
 │   └── mocks/ (p1_decisions, p3_ask)    ← contratos falsos para correr P2 solo
@@ -556,7 +559,7 @@ smart-request-router/
 ### 11.1 Riesgos
 | ID | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|---|
-| **R1** | Laya es un proyecto nuevo (sept. 2026): API, documentación o checkpoints inmaduros o cambiantes | Media | Alto | Fijar versiones; aislar Laya detrás de una interfaz en `routercore/laya.py`; **plan B: Von o ModernBERT con cabezas multi-tarea** (misma interfaz) |
+| **R1** | Laya es un proyecto nuevo (sept. 2026): API, documentación o checkpoints inmaduros o cambiantes | Media | Alto | Fijar versiones; aislar Laya detrás del puerto `DecisionModel` (`routercore/application/ports.py`); **plan B: Von o ModernBERT con cabezas multi-tarea** (misma interfaz) |
 | **R1b** | **Latencia de Laya en CPU** (hallazgo del curso C7): el fabricante reporta 193–464 ms por request y un reporte de la comunidad mide varios segundos en una laptop sin optimizar | Media | Alto | En M3: preload, ONNX int8, micro-lotes y entradas cortas; medir el p95 en el i5. Si el p95 supera 300 ms, usar **Von (OpenVINO CPU)** |
 | **R1c** | **Colapso con muchas opciones** (Banking77 con 77 opciones: 0.425 en Laya vs 0.870 en Jev) | Alta si se usan las 77 | Alto | Ya mitigado en el diseño: **~12 rutas**; sub-intención como segunda pregunta opcional |
 | **R1d** | **El checkpoint multilingüe viene sin calibrar** (ECE 0.314) y las preguntas `score` son las más débiles | Alta | Medio | Temperatura por idioma y por pregunta, con compuerta de ECE en la CI; la red de seguridad de urgencia no depende solo del `score` |

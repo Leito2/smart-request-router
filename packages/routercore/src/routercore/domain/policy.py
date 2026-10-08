@@ -1,6 +1,9 @@
-"""System 1 / System 2 policy (course 06/34 note 05). Thresholds come from config/policy.yaml."""
+"""System 1 / System 2 policy (course 06/34 note 05). Thresholds come from config/policy.yaml
+(loaded by routercore.adapters.policy_config); the defaults here mirror it for tests."""
 import math
 from dataclasses import dataclass
+
+from routercore.domain.decision import Reason
 
 
 @dataclass(frozen=True)
@@ -17,7 +20,7 @@ def normalized_entropy(p: dict[str, float]) -> float:
 
 
 def decide(route_p: dict[str, float], urgency_p: dict[str, float], lang_supported: bool,
-           pol: Policy | None = None) -> tuple[str, str]:
+           pol: Policy | None = None) -> tuple[str, Reason]:
     """Return (target, reason): target is a route name or 'system2'."""
     pol = pol or Policy()
     ranked = sorted(route_p.items(), key=lambda kv: kv[1], reverse=True)

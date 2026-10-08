@@ -14,8 +14,9 @@ down:      ## Stop everything
 	docker compose --profile core --profile agent --profile ops down
 test:      ## Unit + contract tests
 	uv run pytest -q
-lint:      ## Lint
+lint:      ## Lint + architecture dependency rule
 	uv run ruff check .
+	uv run lint-imports
 fmt:       ## Format
 	uv run ruff format .
 data train calibrate eval eval-full smoke surge-demo:   ## Implemented in later milestones (PLAN.md §10)

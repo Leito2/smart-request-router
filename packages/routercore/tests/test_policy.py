@@ -1,4 +1,4 @@
-from routercore.policy import decide
+from routercore.domain.policy import decide
 
 CALM = {"0": 0.7, "1": 0.25, "2": 0.04, "3": 0.01}
 

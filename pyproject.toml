@@ -17,7 +17,7 @@ routercore = { workspace = true }
 judgekit = { workspace = true }
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.1"]
 
 [tool.ruff]
 line-length = 110
@@ -28,6 +28,22 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["routercore", "judgekit"]
+
+# Clean Architecture dependency rule (docs/adr/0002): outer layers import inner ones, never the reverse.
+[tool.importlinter]
+root_packages = ["routercore"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "routercore layers point inward"
+type = "layers"
+layers = ["routercore.adapters", "routercore.application", "routercore.domain"]
+
+[[tool.importlinter.contracts]]
+name = "domain is pure Python"
+type = "forbidden"
+source_modules = ["routercore.domain"]
+forbidden_modules = ["pydantic", "yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/routercore/tests", "packages/judgekit/tests", "tests"]

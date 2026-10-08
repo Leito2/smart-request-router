@@ -1,10 +1,10 @@
-"""Event contracts v1 (PLAN.md §2.4): inbound-messages → routed | escalations."""
+"""Event contracts v1 (PLAN.md §2.4): inbound-messages → routed | escalations.
+They are the use cases' input/output models; adapters serialize them to topics and HTTP."""
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-DecidedBy = Literal["system1", "system2", "safety_net", "human"]
-EscalationReason = Literal["low_confidence", "multi_intent", "urgency_safety_net", "ood"]
+from routercore.domain.decision import DecidedBy, EscalationReason, Priority
 
 
 class InboundMessage(BaseModel):
@@ -19,7 +19,7 @@ class InboundMessage(BaseModel):
 class Routed(BaseModel):
     message_id: str
     route: str
-    priority: Literal["low", "normal", "high", "critical"]
+    priority: Priority
     decided_by: DecidedBy
     confidence: float = Field(ge=0, le=1)
     model_version: str
