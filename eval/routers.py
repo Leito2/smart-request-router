@@ -29,7 +29,7 @@ class ModelRouter:
         for start in range(0, len(rows), BATCH):
             batch = rows[start:start + BATCH]
             messages = [InboundMessage(message_id=r["id"], customer_id="eval", channel="chat",
-                                       text=r["text"], ts_sent_ns=0) for r in batch]
+                                       text=r["text"], lang=r.get("lang"), ts_sent_ns=0) for r in batch]
             began = time.perf_counter()
             assessments = self._model.assess(messages)
             per_message_ms = (time.perf_counter() - began) * 1000 / len(batch)

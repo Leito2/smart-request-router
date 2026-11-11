@@ -1611,6 +1611,24 @@ wheels = [
 ]
 
 [[package]]
+name = "laya"
+version = "0.4.31"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "transformers" },
+    { name = "vegaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/97/bf/5d307d1fd0b5a742b461f677f8cc489e429c149b543ba6f37614515c9ece/laya-0.4.31.tar.gz", hash = "sha256:aa3d25996d0d61eccb3143702702ee3116e159a5e374e138209bd331c8f67d0a", size = 1479427, upload-time = "2026-11-10T19:23:54.779Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/f9/83ec30c118df9e5d1a492b2405cef4875aaa5cae9a1bb7d1b2e8820d426b/laya-0.4.31-py3-none-any.whl", hash = "sha256:65a51283c7d63f1126df65739bfcf47151c98ca8ef98f987d10dcfab201b87f9", size = 504532, upload-time = "2026-11-10T19:23:53.156Z" },
+]
+
+[[package]]
 name = "mako"
 version = "1.4.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3541,6 +3559,7 @@ dev = [
     { name = "ruff" },
 ]
 ml = [
+    { name = "laya" },
     { name = "sentence-transformers" },
     { name = "setfit" },
     { name = "torch" },
@@ -3561,6 +3580,7 @@ dev = [
     { name = "ruff", specifier = ">=0.6" },
 ]
 ml = [
+    { name = "laya", specifier = ">=0.4.31" },
     { name = "sentence-transformers", specifier = ">=3" },
     { name = "setfit", specifier = ">=1.1" },
     { name = "torch", specifier = ">=2.4" },
@@ -3874,6 +3894,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/da/34/30e9280707135d2cfc589dfff3cb796bd07a3aeb1a3e415ba09dd89d7bb4/uvicorn-0.54.0.tar.gz", hash = "sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620", size = 112283, upload-time = "2026-09-25T06:52:37.601Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl", hash = "sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf", size = 87427, upload-time = "2026-09-25T06:52:35.829Z" },
+]
+
+[[package]]
+name = "vegaml"
+version = "0.16.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a1/e2/bbe3994f44afa29a80e8855aa6a61ee8c844efd36add9f91a4b536a4a2db/vegaml-0.16.1.tar.gz", hash = "sha256:782e89824c98443d6d1b293454456b5bd1f5bee2677ff35b7e0dc6630366738b", size = 232857, upload-time = "2026-11-08T20:00:06.664Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/f9/6d3995e78ccf3efad348ba8b3357ad0ea3107512b4385806ef8008fdc46f/vegaml-0.16.1-py3-none-any.whl", hash = "sha256:8dd00b63c09c8cb5292fefd2aa76891ed7574422ad0cbc71f22745df4a97458c", size = 150504, upload-time = "2026-11-08T20:00:05.129Z" },
 ]
 
 [[package]]

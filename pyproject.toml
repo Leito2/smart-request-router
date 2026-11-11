@@ -19,7 +19,7 @@ judgekit = { workspace = true }
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.1", "aiohttp>=3.10"]
 data = ["pyarrow>=17"]            # training/fetch_banking77.py; not installed by CI
-ml = ["setfit>=1.1", "sentence-transformers>=3", "torch>=2.4"]   # B1 SetFit, Laya; not installed by CI
+ml = ["setfit>=1.1", "sentence-transformers>=3", "torch>=2.4", "laya>=0.4.31"]   # B1 SetFit, Laya; not installed by CI
 
 [tool.ruff]
 line-length = 110

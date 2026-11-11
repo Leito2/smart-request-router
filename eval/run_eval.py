@@ -1,12 +1,14 @@
 """Evaluate one router on one dataset with the shared harness (PLAN §5).
 
-Usage: python eval/run_eval.py --router b0|b1|b4 --set test|golden|hard [--policy] [--limit N] [--mlflow]
+Usage: python eval/run_eval.py --router b0|b1|b2|b3|b4 --set test|golden|hard [--policy] [--limit N]
+[--mlflow]
 Writes docs/results/<router>-<set>.json. B4 reads LLM_BASE_URL / LLM_MODEL / LLM_API_KEY from the environment
 (default: local Ollama + qwen3:1.7b); LLM_EXTRA_BODY adds request fields (JSON).
 """
 import argparse
 import json
 import os
+import random
 import sys
 from pathlib import Path
 
@@ -27,7 +29,9 @@ def load_rows(name: str, limit: int | None) -> list[dict]:
     rows = [json.loads(line) for line in SETS[name].read_text(encoding="utf-8").splitlines() if line]
     if name == "test":
         rows = [r for r in rows if r["split"] == "test"]
-    return rows[:limit] if limit else rows
+    if not limit:
+        return rows
+    return random.Random(0).sample(rows, min(limit, len(rows)))    # fixed seed: same subset
 
 
 def build_router(name: str, route_map, policy):
@@ -37,6 +41,16 @@ def build_router(name: str, route_map, policy):
     if name == "b1":
         from baselines.setfit_model import SetFitRouter
         return ModelRouter(SetFitRouter.load(ROOT / "models" / "b1_setfit"), policy)
+    if name in ("b2", "b3"):
+        from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration
+        calibration_path = ROOT / "models" / "calibration.json"
+        checkpoint = str(ROOT / "models" / "laya_ft") if name == "b3" else CHECKPOINT
+        use_calibration = name == "b3" and calibration_path.exists()
+        model = LayaModel.load(
+            route_map.routes, checkpoint=checkpoint, model_version=f"laya-{name}",
+            calibration=load_calibration(calibration_path) if use_calibration else None,
+            supported_langs={"en", "es"})
+        return ModelRouter(model, policy)
     if name == "b4":
         base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434")
         model = os.environ.get("LLM_MODEL", "qwen3:1.7b")
