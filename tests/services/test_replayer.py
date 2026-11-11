@@ -1,4 +1,4 @@
-from services.replayer.main import build_events, pick_rows
+from services.replayer.main import build_events, parse_surge, pick_rows, surge_rows
 
 
 def rows(n_en=6, n_es=4):
@@ -17,3 +17,16 @@ def test_events_follow_the_inbound_contract_and_are_keyed_by_customer():
     assert all(e["customer_id"].startswith("c_") and e["channel"] in {"chat", "email", "app"} for e in events)
     assert events[0]["text"] == "en 0" and events[0]["lang"] == "en"
     assert len({e["message_id"] for e in events}) == 10
+
+
+def test_parse_surge_spec():
+    assert parse_surge("card_declined:5:120:180") == ("card_declined", 5.0, 120.0, 180.0)
+
+
+def test_surge_rows_add_extra_messages_of_one_route_inside_the_window():
+    pool = [{"id": "a", "text": "x", "lang": "en", "route": "payments"},
+            {"id": "b", "text": "y", "lang": "en", "route": "fees"}]
+    extra = surge_rows(pool, "payments", factor=5, base_rate=10, at_s=120, duration_s=60, seed=0)
+    assert len(extra) == int(10 * (5 - 1) * 60)            # (factor - 1) x base rate over the window
+    assert all(row["route"] == "payments" for _, row in extra)
+    assert all(120 <= t < 180 for t, _ in extra)

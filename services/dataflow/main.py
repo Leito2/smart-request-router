@@ -17,6 +17,9 @@ OUT_TOPICS = ("routed", "escalations", "dlq")
 KEY_OF = {"routed": lambda v: v["message_id"], "escalations": lambda v: v["message"]["message_id"],
           "dlq": lambda v: str(v["raw"].get("message_id", ""))}
 OUTCOMES = Counter("router_outcomes_total", "Messages by output topic", ["topic"])
+ESCALATIONS = Counter("router_escalations_total", "Escalations by reason", ["reason"])
+CONFIDENCE = Histogram("router_confidence", "System 1 confidence of routed messages",
+                       buckets=(.5, .6, .7, .8, .85, .9, .95, .99, 1.0))
 LATENCY = Histogram("router_process_seconds", "Per-message processing time",
                     buckets=(.005, .01, .025, .05, .1, .25, .5, 1, 2.5))
 
@@ -36,6 +39,11 @@ def main() -> None:
         rows = process(value, customer_state, route)
         state.set("recent", customer_state["recent"])
         LATENCY.observe(time.perf_counter() - started)
+        for topic, _, body in rows:
+            if topic == "escalations":
+                ESCALATIONS.labels(body["reason"]).inc()
+            elif topic == "routed":
+                CONFIDENCE.observe(body["confidence"])
         return [{"topic": topic, "value": body} for topic, _, body in rows]
 
     sdf = app.dataframe(inbound).apply(step, stateful=True, expand=True)

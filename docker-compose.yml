@@ -53,11 +53,22 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     mem_limit: 700m   # semantic cache + guardrails ONNX models (P0 v2)
 
+  prometheus:
+    profiles: ["ops"]
+    image: prom/prometheus:latest           # pin before v1.0
+    volumes: ["./observability/prometheus:/etc/prometheus:ro"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["9090:9090"]
+    mem_limit: 200m
+
   grafana:
     profiles: ["ops"]
-    image: grafana/grafana:latest           # pin in M6
+    image: grafana/grafana:latest           # pin before v1.0
+    depends_on: [prometheus]
     environment: { GF_AUTH_ANONYMOUS_ENABLED: "true", GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer }
-    volumes: ["./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"]
+    volumes:
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports: ["3000:3000"]
     mem_limit: 150m
 

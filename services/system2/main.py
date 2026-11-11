@@ -7,11 +7,13 @@ Env: BROKER, GATEWAY_URL, GATEWAY_KEY, LLM_MODEL, REDIS_URL, P1_URL, P3_URL.
 import json
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 
 import redis
 from confluent_kafka import Consumer, Producer
+from prometheus_client import Counter, Histogram, start_http_server
 
 from routercore.adapters.route_map_config import load_route_map
 from routercore.application.contracts import Escalation
@@ -22,6 +24,10 @@ from services.system2.graph import FALLBACK_ROUTE, build_agent
 
 log = logging.getLogger("system2")
 CONCURRENCY, TIMEOUT_S = 2, 20
+S2_LATENCY = Histogram("s2_latency_seconds", "System 2 time per escalation",
+                       buckets=(.5, 1, 2, 5, 10, 20))
+S2_FALLBACK = Counter("s2_fallback_total", "System 2 decisions that fell back to triage")
+S2_TOKENS = Counter("s2_tokens_total", "LLM tokens spent by System 2")
 
 
 def fallback(escalation: dict, error: str) -> dict:
@@ -34,6 +40,7 @@ def fallback(escalation: dict, error: str) -> dict:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    start_http_server(int(os.environ.get("METRICS_PORT", "8003")))
     routes = load_route_map(ROOT / "config" / "route_map.yaml").routes
     llm = GatewayLlm(os.environ.get("GATEWAY_URL", "http://localhost:8080"),
                      model=os.environ.get("LLM_MODEL", "smart_router"), api_key=os.environ.get("GATEWAY_KEY"))
@@ -57,11 +64,16 @@ def main() -> None:
         if message is None or message.error():
             continue
         raw = json.loads(message.value())
+        began, tokens_before = time.perf_counter(), llm.tokens
         future = pool.submit(resolve, raw)
         try:
             decision = future.result(timeout=TIMEOUT_S)
         except (FutureTimeout, Exception) as error:        # timeout, bad LLM, down gateway: human triage
             decision = fallback(raw, type(error).__name__)
+        S2_LATENCY.observe(time.perf_counter() - began)
+        S2_TOKENS.inc(llm.tokens - tokens_before)
+        if decision["route"] == FALLBACK_ROUTE:
+            S2_FALLBACK.inc()
         producer.produce("routed", key=decision["message_id"], value=json.dumps(decision))
         producer.flush()
         consumer.commit(message)

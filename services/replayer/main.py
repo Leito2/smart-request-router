@@ -29,6 +29,22 @@ def pick_rows(rows: list[dict], count: int, lang_mix: dict[str, float], seed: in
     return picked
 
 
+def parse_surge(spec: str) -> tuple[str, float, float, float]:
+    """'route:factor:at_s:duration_s' -> e.g. payments x5 starting at 120 s for 180 s."""
+    route, factor, at_s, duration_s = spec.split(":")
+    return route, float(factor), float(at_s), float(duration_s)
+
+
+def surge_rows(rows: list[dict], route: str, *, factor: float, base_rate: float, at_s: float,
+               duration_s: float, seed: int) -> list[tuple[float, dict]]:
+    """Extra (offset_s, row) events so `route` runs at `factor` x its normal rate during the window."""
+    pool = [r for r in rows if r.get("route") == route]
+    rng = random.Random(seed)
+    count = int(base_rate * (factor - 1) * duration_s)
+    schedule = ((at_s + duration_s * i / count, rng.choice(pool)) for i in range(count))
+    return sorted(schedule, key=lambda x: x[0])
+
+
 def build_events(rows: list[dict], *, customers: int, start_ns: int, seed: int) -> list[dict]:
     rng = random.Random(seed)
     events = []
@@ -50,16 +66,24 @@ def main() -> None:
     parser.add_argument("--customers", type=int, default=200)
     parser.add_argument("--broker", default="localhost:9092")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--surge", help="route:factor:at_s:duration_s, e.g. payments:5:120:180")
     args = parser.parse_args()
 
     mix = {k: float(v) for k, v in (part.split(":") for part in args.lang_mix.split(","))}
     total = int(args.rate * args.duration)
     rows = pick_rows(load_rows(args.dataset), total, mix, args.seed)
-    events = build_events(rows, customers=args.customers, start_ns=time.time_ns(), seed=args.seed)
+    schedule = [(i / args.rate, row) for i, row in enumerate(rows)]
+    if args.surge:
+        route, factor, at_s, duration_s = parse_surge(args.surge)
+        schedule = sorted(schedule + surge_rows(load_rows(args.dataset), route, factor=factor,
+                                                base_rate=args.rate, at_s=at_s, duration_s=duration_s,
+                                                seed=args.seed), key=lambda x: x[0])
+    events = build_events([row for _, row in schedule], customers=args.customers, start_ns=time.time_ns(),
+                          seed=args.seed)
     producer = Producer({"bootstrap.servers": args.broker})
     began = time.perf_counter()
-    for i, event in enumerate(events):
-        wait = began + i / args.rate - time.perf_counter()     # open loop: never waits for replies
+    for (offset, _), event in zip(schedule, events, strict=True):
+        wait = began + offset - time.perf_counter()            # open loop: never waits for replies
         if wait > 0:
             time.sleep(wait)
         event["ts_sent_ns"] = time.time_ns()

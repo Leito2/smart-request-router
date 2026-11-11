@@ -25,5 +25,7 @@ fmt:       ## Format
 	uv run ruff format .
 smoke:     ## End-to-end System 1 stream (needs `make up`): coverage and p95
 	uv run python scripts/smoke.py
-train calibrate eval eval-full surge-demo:   ## Implemented in later milestones (PLAN.md §10)
+surge-demo: ## Inject `payments` x5 and show the surge alert (needs `make up`)
+	uv run python scripts/surge_demo.py
+train calibrate eval eval-full:   ## Implemented in later milestones (PLAN.md §10)
 	@echo "'$@' arrives in a later milestone — see PLAN.md §10"; exit 1

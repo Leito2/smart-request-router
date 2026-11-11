@@ -1,0 +1,6 @@
+# Faster clock for `make surge-demo`: 10 s windows, so the warm-up and the detection fit in minutes.
+window_s: 10
+ewma_alpha: 0.2
+z_threshold: 4
+consecutive_windows: 2
+warmup_windows: 6

@@ -1,0 +1,21 @@
+groups:
+  - name: router
+    rules:
+      - alert: SystemOneCoverageLow
+        expr: >
+          sum(rate(router_outcomes_total{topic="routed"}[5m]))
+          / sum(rate(router_outcomes_total{topic=~"routed|escalations"}[5m])) < 0.5
+        for: 5m
+        annotations: {summary: "System 1 coverage below 50% (possible drift)"}
+      - alert: SurgeDetected
+        expr: increase(router_surge_alerts_total[2m]) > 0
+        annotations: {summary: "Volume surge on route {{ $labels.route }}"}
+      - alert: DeadLetterQueueNotEmpty
+        expr: increase(router_outcomes_total{topic="dlq"}[5m]) > 0
+        annotations: {summary: "Invalid messages arriving in the DLQ"}
+      - alert: SystemTwoFallbackHigh
+        expr: increase(s2_fallback_total[10m]) > 5
+        annotations: {summary: "System 2 is falling back to triage"}
+      - alert: SystemTwoSlow
+        expr: histogram_quantile(0.95, sum(rate(s2_latency_seconds_bucket[5m])) by (le)) > 15
+        annotations: {summary: "System 2 p95 above 15 s"}
