@@ -1,7 +1,8 @@
 """End-to-end smoke test of the System 1 stream (PLAN §10 M4): replayer → Redpanda → dataflow → dispatcher.
 
-Needs `make up PROFILE=core`. Starts the mocks, dataflow and dispatcher as host processes, replays messages, then
-reads the topics back and reports coverage, p50/p95 latency and dispatcher effects. Writes docs/results/smoke.json.
+Needs `make up PROFILE=core`. Starts the mocks, dataflow and dispatcher as host processes, replays
+messages, then reads the topics back and reports coverage and p50/p95 latency.
+Writes docs/results/smoke.json.
 Usage: python scripts/smoke.py [--messages 300] [--rate 20] [--model laya|rules]
 """
 import argparse
@@ -52,8 +53,9 @@ def main() -> None:
              for module in ("services.mocks.main", "services.dataflow.main", "services.dispatcher.main")]
     try:
         time.sleep(25 if args.model == "laya" else 8)           # model load + consumer group join
-        subprocess.run([sys.executable, "-m", "services.replayer.main", "--rate", str(args.rate), "--duration",
-                        str(args.messages / args.rate), "--broker", BROKER], cwd=ROOT, env=env, check=True)
+        subprocess.run([sys.executable, "-m", "services.replayer.main", "--rate", str(args.rate),
+                        "--duration", str(args.messages / args.rate), "--broker", BROKER],
+                       cwd=ROOT, env=env, check=True)
         time.sleep(10)
         inbound = {m["message_id"]: m["ts_sent_ns"] for m in read_topic("inbound-messages")}
         routed, escalated = read_topic("routed"), read_topic("escalations")
@@ -62,7 +64,8 @@ def main() -> None:
         for proc in procs:
             proc.terminate()
 
-    latencies = [(r["ts_routed_ns"] - inbound[r["message_id"]]) / 1e6 for r in routed if r["message_id"] in inbound]
+    latencies = [(r["ts_routed_ns"] - inbound[r["message_id"]]) / 1e6
+                 for r in routed if r["message_id"] in inbound]
     reasons: dict[str, int] = {}
     for e in escalated:
         reasons[e["reason"]] = reasons.get(e["reason"], 0) + 1
