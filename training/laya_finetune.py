@@ -40,17 +40,20 @@ def main() -> None:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--micro-batch", type=int, default=8)
     parser.add_argument("--grad-accum", type=int, default=4)
+    parser.add_argument("--max-len", type=int, default=320, help="sequence budget: 12-option head + message")
+    parser.add_argument("--limit", type=int, help="smoke test: train on the first N rows only")
     args = parser.parse_args()
 
     routes = load_route_map(ROOT / "config" / "route_map.yaml").routes
     records = [json.loads(line) for line in (ROOT / "training/data/dataset.jsonl").read_text(
         encoding="utf-8").splitlines() if line]
     data = ROOT / "training/data/laya"
-    write_jsonl(to_laya_rows(records, routes, split="train"), data / "train.jsonl")
+    train_rows = to_laya_rows(records, routes, split="train")
+    write_jsonl(train_rows[:args.limit] if args.limit else train_rows, data / "train.jsonl")
     write_jsonl(to_laya_rows(records, routes, split="val"), data / "val.jsonl")
 
     config = TrainConfig(epochs=args.epochs, micro_batch=args.micro_batch, grad_accum=args.grad_accum,
-                         freeze_encoder=not args.full, shuffle_options=("choice",),
+                         freeze_encoder=not args.full, shuffle_options=("choice",), max_len=args.max_len,
                          eval_data=str(data / "val.jsonl"))
     started = time.perf_counter()
     summary = finetune(str(data / "train.jsonl"), CHECKPOINT, str(ROOT / "models" / "laya_ft"), config,
