@@ -6,7 +6,9 @@ stride. CI uses `rules` until the Laya checkpoint is published (M9); `--model la
 """
 import argparse
 import json
+import random
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from harness import evaluate
@@ -26,6 +28,15 @@ def select_ci_subset(rows: list[dict], size: int) -> list[dict]:
     room = max(size - len(urgent), 0)
     stride = max(len(rest) // room, 1) if room else 1
     return (urgent + rest[::stride][:room])[:size]
+
+
+def degrade_routes(routes: list[str], labels: list[str], *, share: float, seed: int) -> list[str]:
+    """Inject a regression for demos: flip `share` of the predictions to a different route."""
+    rng = random.Random(seed)
+    out = list(routes)
+    for i in rng.sample(range(len(out)), round(share * len(out))):
+        out[i] = rng.choice([label for label in labels if label != out[i]])
+    return out
 
 
 def gate_metrics(current: dict[str, float], baseline: dict[str, float]) -> dict[str, float]:
@@ -57,12 +68,18 @@ def main() -> None:
     parser.add_argument("--model", default="rules")
     parser.add_argument("--size", type=int, default=100)
     parser.add_argument("--update-baseline", action="store_true")
+    parser.add_argument("--degrade", type=float, default=0.0, help="demo: flip this share of predictions")
     args = parser.parse_args()
 
     golden = [json.loads(line) for line in
               (ROOT / "training/golden_set/golden.jsonl").read_text(encoding="utf-8").splitlines() if line]
     subset = select_ci_subset(golden, args.size)
-    metrics = evaluate(subset, ModelRouter(build_model(args.model), None).predict(subset))
+    predictions = ModelRouter(build_model(args.model), None).predict(subset)
+    if args.degrade:
+        labels = sorted({r["route"] for r in golden})
+        flipped = degrade_routes([p.route for p in predictions], labels, share=args.degrade, seed=0)
+        predictions = [replace(p, route=route) for p, route in zip(predictions, flipped, strict=True)]
+    metrics = evaluate(subset, predictions)
     print(json.dumps({k: round(v, 4) for k, v in metrics.items()}, indent=2))
 
     if args.update_baseline:

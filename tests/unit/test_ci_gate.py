@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ci_gate import gate_failures, gate_metrics, select_ci_subset
+from ci_gate import degrade_routes, gate_failures, gate_metrics, select_ci_subset
 
 from judgekit.gate import load_rules
 
@@ -38,3 +38,11 @@ def test_urgent_recall_below_98_fails():
 def test_ece_rise_of_more_than_two_points_fails():
     current = {"macro_f1": 0.90, "urgent_recall": 0.99, "ece": 0.07}
     assert any("ece_rise" in f for f in gate_failures(RULES, gate_metrics(current, BASELINE)))
+
+
+def test_degradation_injection_flips_the_requested_share_deterministically():
+    routes = ["cards"] * 100
+    flipped = degrade_routes(routes, ["cards", "fees"], share=0.3, seed=0)
+    assert sum(a != b for a, b in zip(routes, flipped, strict=True)) == 30
+    assert flipped == degrade_routes(routes, ["cards", "fees"], share=0.3, seed=0)
+    assert degrade_routes(routes, ["cards", "fees"], share=0.0, seed=0) == routes

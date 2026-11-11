@@ -1,0 +1,455 @@
+# PIPELINE DEFINITION
+# Name: quality-loop
+# Description: Gate a candidate; on regression retrain and gate again
+# Inputs:
+#    degrade: float [Default: 0.0]
+#    model: str [Default: 'rules']
+#    repo: str
+#    train_cmd: str [Default: 'echo retraining']
+#    version: str [Default: '1']
+components:
+  comp-condition-1:
+    dag:
+      tasks:
+        promote-step:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-promote-step
+          inputs:
+            parameters:
+              repo:
+                componentInputParameter: pipelinechannel--repo
+              version:
+                componentInputParameter: pipelinechannel--version
+          taskInfo:
+            name: promote-step
+    inputDefinitions:
+      parameters:
+        pipelinechannel--gate-step-Output:
+          parameterType: STRING
+        pipelinechannel--repo:
+          parameterType: STRING
+        pipelinechannel--version:
+          parameterType: STRING
+  comp-condition-2:
+    dag:
+      tasks:
+        condition-3:
+          componentRef:
+            name: comp-condition-3
+          dependentTasks:
+          - gate-step-2
+          inputs:
+            parameters:
+              pipelinechannel--gate-step-2-Output:
+                taskOutputParameter:
+                  outputParameterKey: Output
+                  producerTask: gate-step-2
+              pipelinechannel--gate-step-Output:
+                componentInputParameter: pipelinechannel--gate-step-Output
+              pipelinechannel--repo:
+                componentInputParameter: pipelinechannel--repo
+              pipelinechannel--version:
+                componentInputParameter: pipelinechannel--version
+          taskInfo:
+            name: condition-3
+          triggerPolicy:
+            condition: inputs.parameter_values['pipelinechannel--gate-step-2-Output']
+              == 'pass'
+        gate-step-2:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-gate-step-2
+          dependentTasks:
+          - retrain-step
+          inputs:
+            parameters:
+              degrade:
+                runtimeValue:
+                  constant: 0.0
+              model:
+                componentInputParameter: pipelinechannel--model
+              repo:
+                componentInputParameter: pipelinechannel--repo
+          taskInfo:
+            name: gate-step-2
+        retrain-step:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-retrain-step
+          inputs:
+            parameters:
+              repo:
+                componentInputParameter: pipelinechannel--repo
+              train_cmd:
+                componentInputParameter: pipelinechannel--train_cmd
+          taskInfo:
+            name: retrain-step
+    inputDefinitions:
+      parameters:
+        pipelinechannel--gate-step-Output:
+          parameterType: STRING
+        pipelinechannel--model:
+          parameterType: STRING
+        pipelinechannel--repo:
+          parameterType: STRING
+        pipelinechannel--train_cmd:
+          parameterType: STRING
+        pipelinechannel--version:
+          parameterType: STRING
+  comp-condition-3:
+    dag:
+      tasks:
+        promote-step-2:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-promote-step-2
+          inputs:
+            parameters:
+              repo:
+                componentInputParameter: pipelinechannel--repo
+              version:
+                componentInputParameter: pipelinechannel--version
+          taskInfo:
+            name: promote-step-2
+    inputDefinitions:
+      parameters:
+        pipelinechannel--gate-step-2-Output:
+          parameterType: STRING
+        pipelinechannel--gate-step-Output:
+          parameterType: STRING
+        pipelinechannel--repo:
+          parameterType: STRING
+        pipelinechannel--version:
+          parameterType: STRING
+  comp-gate-step:
+    executorLabel: exec-gate-step
+    inputDefinitions:
+      parameters:
+        degrade:
+          parameterType: NUMBER_DOUBLE
+        model:
+          parameterType: STRING
+        repo:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-gate-step-2:
+    executorLabel: exec-gate-step-2
+    inputDefinitions:
+      parameters:
+        degrade:
+          parameterType: NUMBER_DOUBLE
+        model:
+          parameterType: STRING
+        repo:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-promote-step:
+    executorLabel: exec-promote-step
+    inputDefinitions:
+      parameters:
+        repo:
+          parameterType: STRING
+        version:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-promote-step-2:
+    executorLabel: exec-promote-step-2
+    inputDefinitions:
+      parameters:
+        repo:
+          parameterType: STRING
+        version:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-retrain-step:
+    executorLabel: exec-retrain-step
+    inputDefinitions:
+      parameters:
+        repo:
+          parameterType: STRING
+        train_cmd:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-gate-step:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - gate_step
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef gate_step(repo: str, model: str, degrade: float) -> str:\n  \
+          \  \"\"\"Run the regression gate (eval/ci_gate.py); returns 'pass' or 'fail'.\"\
+          \"\"\n    import os\n    import subprocess\n    import sys\n\n    command\
+          \ = [sys.executable, f\"{repo}/eval/ci_gate.py\", \"--model\", model, \"\
+          --degrade\", str(degrade)]\n    env = {**os.environ, \"PYTHONPATH\": os.pathsep.join([repo,\
+          \ f\"{repo}/eval\", f\"{repo}/training\"])}\n    result = subprocess.run(command,\
+          \ capture_output=True, text=True, cwd=repo, env=env)\n    print(result.stdout[-2000:],\
+          \ result.stderr[-1000:])\n    return \"pass\" if result.returncode == 0\
+          \ else \"fail\"\n\n"
+        image: python:3.12-slim
+    exec-gate-step-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - gate_step
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef gate_step(repo: str, model: str, degrade: float) -> str:\n  \
+          \  \"\"\"Run the regression gate (eval/ci_gate.py); returns 'pass' or 'fail'.\"\
+          \"\"\n    import os\n    import subprocess\n    import sys\n\n    command\
+          \ = [sys.executable, f\"{repo}/eval/ci_gate.py\", \"--model\", model, \"\
+          --degrade\", str(degrade)]\n    env = {**os.environ, \"PYTHONPATH\": os.pathsep.join([repo,\
+          \ f\"{repo}/eval\", f\"{repo}/training\"])}\n    result = subprocess.run(command,\
+          \ capture_output=True, text=True, cwd=repo, env=env)\n    print(result.stdout[-2000:],\
+          \ result.stderr[-1000:])\n    return \"pass\" if result.returncode == 0\
+          \ else \"fail\"\n\n"
+        image: python:3.12-slim
+    exec-promote-step:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - promote_step
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef promote_step(repo: str, version: str) -> str:\n    \"\"\"Promote\
+          \ the candidate to `production` (the old one is kept as `previous`).\"\"\
+          \"\n    import subprocess\n    import sys\n\n    command = [sys.executable,\
+          \ f\"{repo}/training/promote.py\", \"promote\", \"--version\", version,\
+          \ \"--gate-passed\"]\n    result = subprocess.run(command, capture_output=True,\
+          \ text=True, cwd=repo)\n    print(result.stdout[-500:], result.stderr[-500:])\n\
+          \    return \"promoted\" if result.returncode == 0 else \"promotion_failed\"\
+          \n\n"
+        image: python:3.12-slim
+    exec-promote-step-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - promote_step
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef promote_step(repo: str, version: str) -> str:\n    \"\"\"Promote\
+          \ the candidate to `production` (the old one is kept as `previous`).\"\"\
+          \"\n    import subprocess\n    import sys\n\n    command = [sys.executable,\
+          \ f\"{repo}/training/promote.py\", \"promote\", \"--version\", version,\
+          \ \"--gate-passed\"]\n    result = subprocess.run(command, capture_output=True,\
+          \ text=True, cwd=repo)\n    print(result.stdout[-500:], result.stderr[-500:])\n\
+          \    return \"promoted\" if result.returncode == 0 else \"promotion_failed\"\
+          \n\n"
+        image: python:3.12-slim
+    exec-retrain-step:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - retrain_step
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef retrain_step(repo: str, train_cmd: str) -> str:\n    \"\"\"Retrain\
+          \ (feedback merge + the train command).\"\"\"\n    import subprocess\n\n\
+          \    result = subprocess.run(train_cmd, shell=True, cwd=repo, capture_output=True,\
+          \ text=True)\n    print(result.stdout[-2000:], result.stderr[-1000:])\n\
+          \    return \"ok\" if result.returncode == 0 else \"failed\"\n\n"
+        image: python:3.12-slim
+pipelineInfo:
+  description: Gate a candidate; on regression retrain and gate again
+  name: quality-loop
+root:
+  dag:
+    tasks:
+      condition-1:
+        componentRef:
+          name: comp-condition-1
+        dependentTasks:
+        - gate-step
+        inputs:
+          parameters:
+            pipelinechannel--gate-step-Output:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: gate-step
+            pipelinechannel--repo:
+              componentInputParameter: repo
+            pipelinechannel--version:
+              componentInputParameter: version
+        taskInfo:
+          name: condition-1
+        triggerPolicy:
+          condition: inputs.parameter_values['pipelinechannel--gate-step-Output']
+            == 'pass'
+      condition-2:
+        componentRef:
+          name: comp-condition-2
+        dependentTasks:
+        - gate-step
+        inputs:
+          parameters:
+            pipelinechannel--gate-step-Output:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: gate-step
+            pipelinechannel--model:
+              componentInputParameter: model
+            pipelinechannel--repo:
+              componentInputParameter: repo
+            pipelinechannel--train_cmd:
+              componentInputParameter: train_cmd
+            pipelinechannel--version:
+              componentInputParameter: version
+        taskInfo:
+          name: condition-2
+        triggerPolicy:
+          condition: inputs.parameter_values['pipelinechannel--gate-step-Output']
+            == 'fail'
+      gate-step:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-gate-step
+        inputs:
+          parameters:
+            degrade:
+              componentInputParameter: degrade
+            model:
+              componentInputParameter: model
+            repo:
+              componentInputParameter: repo
+        taskInfo:
+          name: gate-step
+  inputDefinitions:
+    parameters:
+      degrade:
+        defaultValue: 0.0
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      model:
+        defaultValue: rules
+        isOptional: true
+        parameterType: STRING
+      repo:
+        parameterType: STRING
+      train_cmd:
+        defaultValue: echo retraining
+        isOptional: true
+        parameterType: STRING
+      version:
+        defaultValue: '1'
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.18.0
