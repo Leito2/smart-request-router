@@ -2,12 +2,12 @@
   "source": "PolyAI/banking77 (CC BY 4.0) + local Spanish translations + hand-written hard cases",
   "files": {
     "training/data/dataset.jsonl": {
-      "rows": 13362,
-      "sha256": "5732e52ebd938574f219befb43968d86172c58d4b5284f48335b3bdeee5b274e"
+      "rows": 14953,
+      "sha256": "0f24a30b65955fd727fadb0bf327e027d79b7ad0fc509e0c0725fcd59f215207"
     },
     "training/golden_set/golden.jsonl": {
       "rows": 500,
-      "sha256": "8937658ef8f8cb66296060436e44333c1adea4928b9029dc4fa6d096ee20b77a"
+      "sha256": "aedf78c6bd5f1fb2915b10bd7e71d54cf8f333aff2d83712511866fba5ef94b9"
     },
     "training/golden_set/hard_cases.jsonl": {
       "rows": 394,
@@ -16,30 +16,31 @@
   },
   "splits": {
     "test/en": 3080,
+    "test/es": 231,
     "train/en": 9060,
-    "train/es": 204,
+    "train/es": 1427,
     "val/en": 988,
-    "val/es": 30
+    "val/es": 167
   },
   "golden": {
     "by_route": {
-      "account": 36,
-      "cards": 46,
-      "disputes": 33,
-      "fees": 37,
-      "fraud_inquiry": 33,
+      "account": 31,
+      "cards": 49,
+      "disputes": 34,
+      "fees": 40,
+      "fraud_inquiry": 28,
       "general": 109,
-      "knowledge": 34,
-      "kyc": 33,
-      "payments": 32,
-      "security": 34,
-      "topup": 37,
-      "transfers": 36
+      "knowledge": 37,
+      "kyc": 31,
+      "payments": 30,
+      "security": 35,
+      "topup": 38,
+      "transfers": 38
     },
     "by_lang": {
-      "en": 434,
-      "es": 66
+      "en": 278,
+      "es": 222
     },
-    "urgent_rows": 35
+    "urgent_rows": 36
   }
 }
