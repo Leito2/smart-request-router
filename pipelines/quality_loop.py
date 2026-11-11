@@ -37,7 +37,8 @@ def promote_step(repo: str, version: str) -> str:
     import subprocess
     import sys
 
-    command = [sys.executable, f"{repo}/training/promote.py", "promote", "--version", version, "--gate-passed"]
+    command = [sys.executable, f"{repo}/training/promote.py", "promote", "--version", version,
+               "--gate-passed"]
     result = subprocess.run(command, capture_output=True, text=True, cwd=repo)
     print(result.stdout[-500:], result.stderr[-500:])
     return "promoted" if result.returncode == 0 else "promotion_failed"
