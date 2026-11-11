@@ -16,6 +16,6 @@
 340 regular test rows balanced by (route, language) + 160 hard cases balanced by category. Candidates are in `training/golden_set/golden.jsonl`; each row has a `review` field filled by a frontier-model review (see `training/golden_set/REVIEW.md`). The kappa reference set is separate and arrives with `judgekit` (M7b).
 
 ## Known limits
-- No `general` or out-of-domain examples in train: Banking77 has none. M3 adds a disjoint training set for them.
+- Banking77 has no `general` or out-of-domain examples, so `training/general_train.py` adds ~100 greetings, thanks, tiny and off-topic messages (train/val only). A test keeps them disjoint from the evaluation hard cases.
 - Urgent rows in the golden set are few (~35); urgent recall is measured on the whole test split.
 - Spanish rows are machine translated; only a reviewed sample is trusted as ground truth.

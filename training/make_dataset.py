@@ -9,7 +9,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from data_prep import build_dataset, select_golden
+from data_prep import build_dataset, general_records, select_golden
+from general_train import general_examples
 from hard_cases import hand_written, hard_records, multi_intent
 
 from routercore.adapters.route_map_config import load_route_map
@@ -37,6 +38,7 @@ def main() -> None:
     translations = {r["origin_id"]: r["es"] for r in load_jsonl(translated)} if translated.exists() else {}
 
     records = build_dataset(train, test, translations, route_map, seed=0)
+    records += general_records(general_examples(), seed=0)
     hard = hard_records(hand_written() + multi_intent(test, route_map, MULTI_INTENT_CASES, seed=1))
     regular_test = [r for r in records if r["split"] == "test"]
     picked = select_golden(regular_test, hard, size=GOLDEN_SIZE, hard_share=GOLDEN_HARD_SHARE, seed=2)

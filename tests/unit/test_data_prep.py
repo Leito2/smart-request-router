@@ -64,3 +64,30 @@ def test_golden_set_is_balanced_across_routes_and_languages_and_includes_hard_ca
     assert max(strata.values()) - min(strata.values()) <= 1
     hard_picked = Counter(g["category"] for g in golden if g["split"] == "hard")
     assert sum(hard_picked.values()) == 5 and set(hard_picked) == {"ood", "short"}
+
+
+def test_general_training_examples_never_overlap_the_hard_cases_used_for_evaluation():
+    from data_prep import _normalize
+    from general_train import general_examples
+    from hard_cases import hand_written
+
+    training = {_normalize(e["text"]) for e in general_examples()}
+    evaluation = {_normalize(c["text"]) for c in hand_written()}
+
+    assert len(training) >= 100
+    assert training.isdisjoint(evaluation)
+    assert {e["lang"] for e in general_examples()} == {"en", "es"}
+    assert all(e["route"] == "general" and e["urgency"] == 0 for e in general_examples())
+
+
+def test_general_records_go_only_to_train_and_val_with_the_standard_labels():
+    from data_prep import general_records
+
+    examples = [{"text": f"hello number {i}", "lang": "en", "route": "general", "urgency": 0}
+                for i in range(60)]
+
+    records = general_records(examples, seed=3, val_fraction=0.2)
+
+    assert {r["split"] for r in records} == {"train", "val"}
+    assert len({r["id"] for r in records}) == 60
+    assert all(r["route"] == "general" and r["intent"] is None and not r["needs_human"] for r in records)

@@ -72,3 +72,15 @@ def select_golden(regular: list[dict], hard: list[dict], *, size: int, hard_shar
     picked_hard = _round_robin(hard, lambda r: r["category"], hard_n, rng)
     picked_regular = _round_robin(regular, lambda r: (r["route"], r["lang"]), size - len(picked_hard), rng)
     return picked_regular + picked_hard
+
+
+def general_records(examples: list[dict], *, seed: int = 0, val_fraction: float = 0.1) -> list[dict]:
+    """Records for the `general` route; they only ever go to train or val, never test."""
+    records = []
+    for i, e in enumerate(examples):
+        origin_id = f"gt-{i}"
+        split = "val" if _in_validation(origin_id, seed, val_fraction) else "train"
+        records.append({"id": f"{origin_id}:{e['lang']}", "origin_id": origin_id, "lang": e["lang"],
+                        "text": e["text"], "intent": None, "route": e["route"], "urgency": e["urgency"],
+                        "needs_human": False, "needs_kb": False, "split": split})
+    return records
