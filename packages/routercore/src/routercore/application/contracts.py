@@ -25,6 +25,7 @@ class Routed(BaseModel):
     model_version: str
     threshold_set: str
     ts_routed_ns: int
+    text: str | None = None                 # carried so the dispatcher can query P1/P3 without a join
 
 
 class Escalation(BaseModel):

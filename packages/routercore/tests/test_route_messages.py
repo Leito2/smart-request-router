@@ -30,7 +30,7 @@ def test_confident_message_is_routed_and_unsure_one_escalated():
 
     assert isinstance(routed, Routed)
     assert (routed.route, routed.priority, routed.confidence) == ("disputes", "low", 0.93)
-    assert (routed.threshold_set, routed.ts_routed_ns) == ("t1", 42)
+    assert (routed.threshold_set, routed.ts_routed_ns, routed.text) == ("t1", 42, "hola")
     assert isinstance(escalated, Escalation)
     assert (escalated.message.message_id, escalated.reason) == ("m2", "multi_intent")
 

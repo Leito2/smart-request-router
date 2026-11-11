@@ -28,4 +28,5 @@ class RouteMessages:
         return Routed(message_id=message.message_id, route=target,
                       priority=priority_from_urgency(a.urgency_p), decided_by="system1",
                       confidence=a.route_p[target], model_version=a.model_version,
-                      threshold_set=self._threshold_set, ts_routed_ns=self._now_ns())
+                      threshold_set=self._threshold_set, ts_routed_ns=self._now_ns(),
+                      text=message.text)
