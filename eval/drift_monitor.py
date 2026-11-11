@@ -50,8 +50,7 @@ def main() -> None:
     reference, current = reference_counts(dataset), feature_counts(decisions)
     report = drift_report(reference, current, threshold=args.threshold)
     out = ROOT / "docs" / "results" / "drift.json"
-    out.write_text(json.dumps(report, indent=2) + "
-", encoding="utf-8")
+    out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
 
     if args.evidently:
