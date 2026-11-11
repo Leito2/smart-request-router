@@ -65,7 +65,8 @@ def main() -> None:
         producer.produce("routed", key=decision["message_id"], value=json.dumps(decision))
         producer.flush()
         consumer.commit(message)
-        log.info("%s -> %s (%s)", decision["message_id"], decision["route"], decision.get("rationale", "")[:60])
+        log.info("%s -> %s (%s)", decision["message_id"], decision["route"],
+                 decision.get("rationale", "")[:60])
 
 
 if __name__ == "__main__":
