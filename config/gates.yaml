@@ -1,0 +1,6 @@
+# Regression gates run on every PR that touches the model, the policy or the prompts (PLAN §5.4).
+# Deltas are measured against eval/production_metrics.json (the current `production` model).
+gates:
+  macro_f1_drop: {max: 0.01}     # fails if macro-F1 falls more than 1 point
+  urgent_recall: {min: 0.98}     # urgent messages must stay caught (routed as urgent or escalated)
+  ece_rise: {max: 0.02}          # fails if calibration worsens by more than 0.02

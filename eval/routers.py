@@ -40,7 +40,8 @@ class ModelRouter:
                     target, _ = decide(a.route_p, a.urgency_p, a.lang_supported, self._policy)
                     escalated = target == "system2"
                 predictions.append(Prediction(route=best_route, urgency=int(_argmax(a.urgency_p)),
-                                              escalated=escalated, latency_ms=per_message_ms))
+                                              escalated=escalated, latency_ms=per_message_ms,
+                                              confidence=max(a.route_p.values())))
         return predictions
 
 

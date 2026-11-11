@@ -10,6 +10,8 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from judgekit.probabilistic import expected_calibration_error
+
 URGENT = 2
 
 
@@ -21,6 +23,7 @@ class Prediction:
     llm_calls: int = 0
     tokens: int = 0
     latency_ms: float = 0.0
+    confidence: float | None = None       # top route probability; enables ECE
 
 
 def macro_f1(truth: Sequence[str], predicted: Sequence[str]) -> float:
@@ -62,6 +65,9 @@ def evaluate(rows: Sequence[dict], predictions: Sequence[Prediction]) -> dict[st
     caught = [i for i in urgent if predictions[i].urgency >= URGENT or predictions[i].escalated]
     metrics["urgent_recall"] = len(caught) / len(urgent) if urgent else 1.0
 
+    if all(p.confidence is not None for p in predictions):
+        metrics["ece"] = expected_calibration_error(
+            [p.confidence for p in predictions], [t == q for t, q in zip(truth, predicted, strict=True)])
     metrics["llm_calls_per_1k"] = 1000 * sum(p.llm_calls for p in predictions) / n
     metrics["tokens_per_1k"] = 1000 * sum(p.tokens for p in predictions) / n
     latencies = [p.latency_ms for p in predictions]
