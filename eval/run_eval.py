@@ -2,7 +2,7 @@
 
 Usage: python eval/run_eval.py --router b0|b1|b4 --set test|golden|hard [--policy] [--limit N] [--mlflow]
 Writes docs/results/<router>-<set>.json. B4 reads LLM_BASE_URL / LLM_MODEL / LLM_API_KEY from the environment
-(default: local Ollama + qwen3:1.7b).
+(default: local Ollama + qwen3:1.7b); LLM_EXTRA_BODY adds request fields (JSON).
 """
 import argparse
 import json
@@ -18,6 +18,7 @@ from routercore.adapters.route_map_config import load_route_map
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "training"))     # baselines/ lives next to the training scripts
+NO_THINKING = '{"reasoning_effort": "none"}'      # qwen3 on Ollama otherwise spends the budget thinking
 SETS = {"test": ROOT / "training/data/dataset.jsonl", "golden": ROOT / "training/golden_set/golden.jsonl",
         "hard": ROOT / "training/golden_set/hard_cases.jsonl"}
 
@@ -40,7 +41,8 @@ def build_router(name: str, route_map, policy):
         base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434")
         model = os.environ.get("LLM_MODEL", "qwen3:1.7b")
         return LlmOnlyRouter(route_map.routes, base_url=base_url, model=model,
-                             api_key=os.environ.get("LLM_API_KEY"))
+                             api_key=os.environ.get("LLM_API_KEY"),
+                             extra_body=json.loads(os.environ.get("LLM_EXTRA_BODY", NO_THINKING)))
     raise SystemExit(f"router {name!r} not available yet")
 
 

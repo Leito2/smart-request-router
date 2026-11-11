@@ -66,9 +66,9 @@ class LlmOnlyRouter:
     """B4: one LLM call per message, structured JSON output. Needs the `runner` extra (aiohttp)."""
 
     def __init__(self, routes: dict[str, str], *, base_url: str, model: str, api_key: str | None = None,
-                 concurrency: int = 2):
+                 concurrency: int = 2, extra_body: dict | None = None):
         self._routes, self._base_url, self._model = routes, base_url, model
-        self._api_key, self._concurrency = api_key, concurrency
+        self._api_key, self._concurrency, self._extra_body = api_key, concurrency, extra_body
 
     def predict(self, rows: list[dict]) -> list[Prediction]:
         return asyncio.run(self._predict(rows))
@@ -79,7 +79,8 @@ class LlmOnlyRouter:
 
         listing = "\n".join(f"- {name}: {desc}" for name, desc in self._routes.items())
         system = SYSTEM_PROMPT.format(routes=listing)
-        async with ChatClient(self._base_url, model=self._model, api_key=self._api_key) as client:
+        async with ChatClient(self._base_url, model=self._model, api_key=self._api_key,
+                              extra_body=self._extra_body) as client:
             async def ask(text: str) -> dict:
                 done = await client.complete(
                     [{"role": "system", "content": system}, {"role": "user", "content": text}], max_tokens=40)

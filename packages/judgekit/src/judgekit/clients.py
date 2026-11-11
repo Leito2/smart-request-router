@@ -15,9 +15,11 @@ class Completion:
 
 
 class ChatClient:
-    def __init__(self, base_url: str, *, model: str, api_key: str | None = None, timeout_s: float = 120):
+    def __init__(self, base_url: str, *, model: str, api_key: str | None = None, timeout_s: float = 120,
+                 extra_body: dict[str, Any] | None = None):
         self._base_url = base_url.rstrip("/")
         self._model = model
+        self._extra_body = extra_body or {}
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._timeout = aiohttp.ClientTimeout(total=timeout_s)
         self._session: aiohttp.ClientSession | None = None
@@ -33,7 +35,8 @@ class ChatClient:
     async def complete(self, messages: list[dict[str, str]], *, max_tokens: int = 256, temperature: float = 0,
                        response_format: dict[str, Any] | None = None) -> Completion:
         body: dict[str, Any] = {"model": self._model, "messages": messages, "max_tokens": max_tokens,
-                                "temperature": temperature}
+                                "temperature": temperature,
+                                **self._extra_body}
         if response_format is not None:
             body["response_format"] = response_format
         started = time.perf_counter()
