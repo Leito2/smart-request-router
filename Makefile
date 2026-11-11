@@ -23,5 +23,7 @@ lint:      ## Lint + architecture dependency rule
 	uv run lint-imports
 fmt:       ## Format
 	uv run ruff format .
-train calibrate eval eval-full smoke surge-demo:   ## Implemented in later milestones (PLAN.md §10)
+smoke:     ## End-to-end System 1 stream (needs `make up`): coverage and p95
+	uv run python scripts/smoke.py
+train calibrate eval eval-full surge-demo:   ## Implemented in later milestones (PLAN.md §10)
 	@echo "'$@' arrives in a later milestone — see PLAN.md §10"; exit 1

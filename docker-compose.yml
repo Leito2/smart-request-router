@@ -13,6 +13,22 @@ services:
     ports: ["9092:9092"]
     mem_limit: 700m
 
+  redpanda-init:
+    <<: *core
+    image: redpandadata/redpanda:latest      # pin in M4
+    depends_on: [redpanda]
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for i in $$(seq 1 30); do rpk -X brokers=redpanda:29092 cluster info >/dev/null 2>&1 && break; sleep 2; done
+        rpk -X brokers=redpanda:29092 topic create inbound-messages -p 6 || true
+        rpk -X brokers=redpanda:29092 topic create routed -p 6 || true
+        rpk -X brokers=redpanda:29092 topic create escalations -p 3 || true
+        rpk -X brokers=redpanda:29092 topic create alerts -p 1 || true
+        rpk -X brokers=redpanda:29092 topic create dlq -p 1 || true
+    mem_limit: 100m
+
   redis:
     <<: *core
     image: redis:8

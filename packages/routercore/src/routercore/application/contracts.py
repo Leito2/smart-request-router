@@ -32,3 +32,4 @@ class Escalation(BaseModel):
     message: InboundMessage
     reason: EscalationReason
     laya: dict                              # raw calibrated distributions per question
+    context: list[str] = Field(default_factory=list)    # customer's recent messages (ADR-2)
