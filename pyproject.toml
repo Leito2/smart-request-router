@@ -26,6 +26,7 @@ ml = ["setfit>=1.1", "sentence-transformers>=3", "torch>=2.4", "laya>=0.4.31"]  
 
 [tool.ruff]
 line-length = 110
+extend-exclude = ["training/vendor"]      # third-party code kept verbatim (see training/vendor/README.md)
 target-version = "py312"
 
 [tool.ruff.lint]
