@@ -155,6 +155,8 @@ Secciones **Overview**, **The Problem**, **The System 1 / System 2 Thesis**, **W
 
 **ADR-7 · Colas con Redis Streams.** Los destinos humanos son *consumer groups* de Redis Streams (`queue:<equipo>`), con acks y reintentos. Es más ligero que otro topic de Kafka por equipo y conecta con el curso C3.
 
+**ADR-8 · At-least-once + idempotencia.** Redpanda reentrega lo no confirmado, así que puede haber duplicados. *Exactly-once* de Quix no cubre el efecto externo del dispatcher (encolar, llamar a P1/P3). Por eso el dispatcher es **idempotente por `message_id`** (clave única en Postgres): procesar el mismo mensaje dos veces da el mismo resultado que una.
+
 ### 2.3 Topics y colas
 | Nombre | Tipo | Clave | Contenido |
 |---|---|---|---|
@@ -231,7 +233,7 @@ Secciones **Overview**, **The Problem**, **The System 1 / System 2 Thesis**, **W
 **🧠** Convierte probabilidades en acciones. Es **clasificación selectiva**: el modelo puede **abstenerse** cuando duda, y eso es una ventaja, no un fallo.
 **⚙️** Reglas en orden:
 1. Red de seguridad de urgencia (ADR-4): P(`"2"`) + P(`"3"`) > `τ_urgent` → `urgency_safety_net`.
-2. Si el idioma no está soportado o se detecta un mensaje fuera de dominio (entropía normalizada > `max_entropy`) → `ood`.
+2. Si el idioma no está soportado o se detecta un mensaje fuera de dominio (entropía normalizada > `max_entropy`) → `ood`. Si la entropía falla en los casos difíciles de fuera de dominio, se agrega una ruta `out_of_scope` entrenada con ejemplos.
 3. Si las dos intenciones más probables están cerca (margen < m) → `multi_intent`.
 4. Si `max P(intent) < τ` → `low_confidence`.
 5. Si no se cumple nada de lo anterior, la decisión es de System 1.
@@ -252,12 +254,14 @@ analyze ──► (¿necesita datos?) ──► tools ──► decide ──►
 - **Herramientas:** `get_customer_history` (Redis), `lookup_payment_decision` (API de P1; mock si P1 no corre), `search_kb` (API de P3; mock si no corre) y `get_laya_scores` (las probabilidades ya calculadas).
 - **Salida estructurada** (Pydantic): `route`, `priority`, `rationale` y `evidence`.
 
-**🔧** LLM local (Qwen3 1.7B en Q4 vía Ollama) **a través del LLM Gateway (`llm-gateway`)**. Concurrencia de 2, timeout de 20 s por caso, máximo 6 pasos. Cada ejecución queda trazada en **Langfuse**. Si algo falla, va a `queue:triage` (humano), nunca se pierde.
+**🔧** LLM vía el alias **`smart_router`** del gateway (`llm-gateway`): gpt-oss-120b (Groq, free tier) → `qwen3:1.7b` local. **Sin modelos Gemma**, para que los jueces (Gemma) sean de otra familia que el agente. También se mide el agente solo con `qwen3:1.7b` local, como comparación. Las herramientas de P1 y P3 tienen dos adaptadores detrás del mismo puerto: **reales** en las demos y la evaluación, **mock** en la CI y los tests. Concurrencia de 2, timeout de 20 s por caso, máximo 6 pasos. Cada ejecución queda trazada en **Langfuse**. Si algo falla, va a `queue:triage` (humano), nunca se pierde.
 **🔁** Un LLM sin agente (una sola llamada con salida estructurada). Es el baseline "S2 sin herramientas" y se mide si las herramientas aportan.
+**✅ Compuerta:** System 2 se queda solo si mejora a Laya en los escalados de forma **significativa** (intervalo de confianza por *bootstrap* > 0). Si no, se simplifica a la llamada única o a `queue:triage`.
+**📘 README:** explica System 1 / System 2, las cuatro razones de escalamiento y el recorrido del agente con un ejemplo completo.
 
 ### 3.7 Dispatcher (`services/dispatcher/`)
 **🧠** Separa **decidir** de **ejecutar**. El router dice "a dónde"; el dispatcher lo hace.
-**⚙️** Consume `routed` y, según la ruta: hace `XADD` al stream del equipo, llama a `P3 /ask` (y guarda la respuesta) o a `P1 /decisions/{id}`, o responde con una plantilla. Registra todo en Postgres.
+**⚙️** Consume `routed` y, según la ruta: hace `XADD` al stream del equipo, llama a `P3 /ask` (y guarda la respuesta) o a `P1 /decisions/{id}`, o responde con una plantilla. Registra todo en Postgres. Es **idempotente por `message_id`** (ADR-8).
 **🔧** Clientes HTTP con timeout y circuit breaker. Los **contratos de P1 y P3 están mockeados** (servidores falsos en Compose), así P2 funciona solo.
 **🔁** Que los equipos consuman directamente de `routed` filtrando (más acoplado).
 
@@ -280,8 +284,8 @@ analyze ──► (¿necesita datos?) ──► tools ──► decide ──►
 **🔁** ADWIN o Page-Hinkley (curso `09/40/04`), o Prophet (demasiado pesado aquí).
 
 ### 3.10 Redis (`infra/redis`)
-**⚙️** Tres usos: (1) **caché de decisiones** por hash del texto normalizado, para las plantillas repetidas ("hola", "gracias"), con TTL de 1 h; (2) **historial de cliente** para el agente; (3) **colas** con Redis Streams.
-**🔧** `maxmemory 128mb`, `allkeys-lru` **solo** para la caché (en un DB lógico aparte de las colas, que no se pueden expulsar).
+**⚙️** Tres usos: (1) **caché de decisiones** por hash del texto normalizado + `model_version` + `threshold_set` (al cambiar de versión, la caché vieja deja de usarse sola), para las plantillas repetidas ("hola", "gracias"), con TTL de 1 h; (2) **historial de cliente** para el agente; (3) **colas** con Redis Streams.
+**🔧** `maxmemory 128mb` con **`volatile-lru`**: Redis aplica la política a toda la instancia, no por DB lógico, así que solo se expulsan claves con TTL. Toda clave de caché lleva TTL; las colas y el historial no, y por eso nunca se expulsan.
 
 ### 3.11 PostgreSQL (`infra/postgres`)
 **⚙️** Tablas `messages`, `decisions`, `escalations`, `feedback` y `alerts`. Vistas: `v_coverage` (System 1 vs System 2), `v_accuracy_with_feedback` y `v_retrain_dataset`.
@@ -316,7 +320,7 @@ Cada componente es una subsección de **Components**, con el detalle técnico pl
 | Banking77-ES | Traducción + paráfrasis con LLM local (gateway, $0) | ~6k | Entrenamiento en español |
 | Etiquetas auxiliares | `urgency`, `needs_human` y `needs_kb` por reglas a partir de la intención, más revisión manual de una muestra | — | Las 3 preguntas extra de Laya |
 | **Casos difíciles** | Escritos y generados a propósito: varias intenciones, negaciones, sarcasmo, mensajes muy cortos, fuera de dominio | ~400 | Evaluar la política de escalamiento |
-| **Set dorado** | **Revisado a mano**, estratificado por ruta e idioma, incluye casos difíciles | ~500 | La verdad para todas las comparaciones (§5) |
+| **Set dorado** | Etiquetado por un **modelo de frontera** (el autor cambia de modelo en Claude Code), estratificado por ruta e idioma, incluye casos difíciles; el autor revisa un resumen con 5 ejemplos | ~500 | La verdad para todas las comparaciones (§5) |
 
 - Split por **paráfrasis de origen**: si una frase está en train, sus traducciones y paráfrasis **no** van al test (evita leakage).
 - **Verificar la licencia de Banking77** al implementar y citarla en el README.
@@ -342,7 +346,7 @@ Cada componente es una subsección de **Components**, con el detalle técnico pl
 ### 4.5 Calibración y umbrales
 1. **Temperature scaling** por pregunta en validación. Reporte de **ECE** y *reliability diagrams*, antes y después.
 2. **Curva riesgo-cobertura:** para cada umbral τ, qué % resuelve System 1 (cobertura) y con qué error. Se elige τ para una **precisión objetivo** de System 1 (p. ej., 97%).
-3. Umbral de la red de seguridad de urgencia elegido para un **recall de urgentes ≥ 98%** (§1.7).
+3. Umbral de la red de seguridad de urgencia: el **mayor** `τ_urgent` que mantiene el **recall de urgentes ≥ 98%** (§1.7), para escalar lo mínimo.
 4. Todo va a `policy.yaml` y a MLflow, junto con las curvas para el README.
 
 ### 4.6 Export e inferencia
@@ -373,18 +377,18 @@ Las correcciones humanas (`POST /feedback`) y las decisiones del System 2 **vali
 
 ### 5.3 LLM-as-a-Judge (validado)
 - **Uso:** el set dorado da la ruta correcta, pero **no** evalúa el `rationale` del agente ni los casos genuinamente ambiguos. El juez califica la calidad del razonamiento y si la evidencia citada es coherente.
-- **Juez local de otra familia que el agente:** Gemma 3 4B (cabe solo en 4 GB de VRAM y se corre **separado** del agente) frente al agente Qwen3. Así se evita el *self-preference bias*.
-- **Validación del juez:** 100 casos etiquetados a mano y se mide el acuerdo juez↔humano (Cohen's kappa). **Si el kappa es bajo, el juez no se usa** para conclusiones, solo como señal. El kappa se reporta en el README.
+- **Juez local de otra familia que el agente:** Gemma 3 4B (cabe solo en 4 GB de VRAM y se corre **separado** del agente) frente al agente (`smart_router`: gpt-oss y Qwen3, sin Gemma). Así se evita el *self-preference bias*.
+- **Validación del juez:** 100 casos etiquetados por un **modelo de frontera** como referencia (el autor cambia de modelo en Claude Code y recibe un resumen con 5 ejemplos), y se mide el acuerdo juez↔referencia (Cohen's kappa). Regla: κ ≥ 0.6. Si no se alcanza: mejorar la rúbrica → probar el panel (local + golden) → si aún falla, **el juez no se usa** para conclusiones, solo como señal, y el README lo declara. El kappa se reporta en el README.
 
 ### 5.4 Compuertas de regresión (CI)
-En cada PR que toca el modelo, la política o los prompts, se corre en la CI un subconjunto del set dorado con **Laya ONNX en CPU**. El LLM va en `mock`, porque la CI no corre LLMs reales.
+En cada PR que toca el modelo, la política o los prompts, se corre en la CI un subconjunto fijo de **100 casos** del set dorado con **Laya ONNX en CPU** (< 1 min). El LLM va en `mock`, porque la CI no corre LLMs reales.
 - ❌ Falla si la macro-F1 cae más de 1 punto frente al `production` actual.
 - ❌ Falla si el recall de urgentes queda por debajo de 98%.
 - ❌ Falla si el ECE sube más de 0.02.
 La evaluación completa (con System 2 y el juez) corre local con `make eval-full`.
 
 ### 5.5 Drift en producción
-Se monitorea la distribución de intenciones (PSI frente al entrenamiento), la **distribución de confianza** (si baja la confianza media, llegan mensajes que el modelo no conoce) y la tasa de `ood`. Una alerta sugiere reentrenar (§4.7).
+Se monitorea la distribución de intenciones (PSI frente al entrenamiento), la **distribución de confianza** (si baja la confianza media, llegan mensajes que el modelo no conoce) la tasa de `ood`, la **tasa de escalamiento** y la mezcla de idiomas: señales de predicción que no necesitan etiquetas, comparadas con Evidently y alertadas en Grafana. Una alerta sugiere reentrenar (§4.7).
 
 ### 5.6 Tabla de resultados (plantilla)
 | Router | Macro-F1 | Recall urg. | ECE | Cobertura S1 | p95 (ms) | Llamadas LLM/1k | Costo est./1k msgs |
@@ -462,7 +466,7 @@ make smoke                        # 50 msg/s durante 2 min → cobertura de S1, 
 | Full fine-tune en Kaggle/Colab | Abrir `training/notebooks/laya_full_ft.ipynb` → `make import-checkpoint` |
 | Calibrar y elegir umbrales | `make calibrate` → `policy.yaml` + curvas |
 | Evaluación rápida (como la CI) | `make eval` |
-| Evaluación completa (S2 + juez) | `ollama pull qwen3:1.7b gemma3:4b` → `make eval-full` |
+| Evaluación completa (S2 + juez, 20–45 min estimado) | `ollama pull qwen3:1.7b gemma3:4b` → `make eval-full` (agente vía `smart_router`) |
 | Sistema completo con agente | `make up PROFILE=agent` + `LLM_PROVIDER=ollama` |
 | Demo de oleada | `make surge-demo` (inyecta "card_declined ×5" y muestra la alerta en R3) |
 | Probar un mensaje | `curl -X POST localhost:8000/route -d '{"text":"me robaron la tarjeta"}'` |
@@ -474,7 +478,7 @@ make smoke                        # 50 msg/s durante 2 min → cobertura de S1, 
 | **Kaggle/Colab** | Full fine-tune de Laya | $0 (cuotas gratis; verificar límites vigentes) |
 | **Langfuse Cloud (free)** | Trazas sin consumir RAM local | $0 en el free tier |
 | **Hugging Face Hub** | Publicar el checkpoint fine-tuneado y la versión ES del dataset (si la licencia lo permite) | $0 |
-| **HF Spaces (CPU básico gratis)** | Demo pública de `POST /route` (solo System 1) | $0; opcional |
+| **HF Spaces (CPU básico gratis)** | Demo pública de `POST /route` (solo System 1), en M9 | $0 |
 | Kubernetes / cloud | Documentado como camino a producción (por regla, solo P3 usa GCP) | — |
 
 **Mapeo a producción:** Redpanda → Redpanda Cloud o MSK; Quix Streams → contenedores en K8s (escala con procesos del consumer group, ≤ particiones); Laya → servicio ONNX en CPU con autoescalado (barato, sin GPU); System 2 → LLM gestionado (Haiku) detrás del gateway; Langfuse Cloud.
@@ -533,20 +537,21 @@ smart-request-router/
 
 ## 10. Hitos de implementación y criterios de aceptación
 **Definición de terminado** (todos los hitos): CI en verde · cabe en 8 GB · secciones del README escritas · $0 · tag del hito.
+**Alcance:** todo el plan. `v1.0` = M0–M9; M10 = `v1.1` (necesita 16 GB).
 
 | Hito | Objetivo | Criterios de aceptación | README | Curso | Tamaño |
 |---|---|---|---|---|---|
 | **M0 · Bootstrap** | Repo, Compose, CI, esqueleto del README | `make doctor` pasa; CI en verde | Problem, Core Concepts (borrador) | — | S |
 | **M1 · Datos** | Banking77 + mapeo de rutas + ES + casos difíciles + **set dorado** | Splits sin leakage; set dorado revisado (500); licencia verificada | Data | — | M |
 | **M2 · Baselines + harness v1** | B0, B1 y B4 evaluados con el mismo harness en MLflow; **`judgekit` v1** (métricas deterministas, runner async con aiohttp, reportes en Pandas) | Tabla con 3 routers; harness reproducible con `make eval`; `judgekit` instalable desde otro repo | Evaluation Harness v1 | C7 (00–02) | M |
-| **M3 · Laya** | B2, fine-tune LoRA (+ full en Kaggle), calibración, ONNX int8 | B3 ≥ B1 en macro-F1; ECE < 0.05 después de calibrar; paridad int8 ≥ 99.5% | Why a Decision Model, Fine-tuning, Calibration | C7 (03–04) | L |
+| **M3 · Laya** | B2, fine-tune LoRA (+ full en Kaggle), calibración, ONNX int8 | B3 ≥ B1 en macro-F1; ECE < 0.05 después de calibrar; paridad int8 ≥ 99.5%; p95 de Laya optimizada < 1 s (si no, plan B, R1b) | Why a Decision Model, Fine-tuning, Calibration | C7 (03–04) | L |
 | **M4 · Streaming System 1** | Redpanda + Quix Streams + política + API + Dispatcher (con mocks) | `make smoke` da cobertura y p95; **primera cifra del CV** (cobertura de S1 @ precisión objetivo, p95) | Architecture, Components (dataflow, policy, API) | C2 (03), C3 (02) | L |
-| **M5 · System 2** | Agente LangGraph + herramientas + guardrails + Langfuse | B5 evaluado; System 2 **supera** a Laya en los escalados (si no, se documenta y se simplifica) | System 2 Agent | C7 (05) | L |
+| **M5 · System 2** | Agente LangGraph + herramientas + guardrails + Langfuse | B5 evaluado con las herramientas reales de P1/P3; System 2 **supera** a Laya en los escalados con mejora significativa (*bootstrap*); si no, se documenta y se simplifica | System 2 Agent | C7 (05) | L |
 | **M6 · Oleadas + observabilidad** | Detector EWMA + `alerts` + dashboards R1–R4 + alertas | `make surge-demo` detecta la oleada en < 2 min; GIF grabado | Surge Detection, Observability | C6 | M |
-| **M7 · Calidad continua** | Juez validado (kappa), compuertas en la CI, drift, lazo de feedback | Kappa reportado; un PR con regresión falla en la CI (demostrado); reentrenamiento con feedback | LLM-as-a-Judge, Regression Gates, Improvement Loop | — | M |
+| **M7 · Calidad continua** | Juez validado (kappa), compuertas en la CI, drift, lazo de feedback | Kappa juez↔referencia reportado; un PR con regresión falla en la CI (demostrado); reentrenamiento con feedback | LLM-as-a-Judge, Regression Gates, Improvement Loop | — | M |
 | **M7b · Evaluación industrial** (§12) | Jueces de `judgekit` (rúbrica, pairwise, claims, seguridad y marca), panel con `judge_golden`, Langfuse (datasets, experiments, prompts, anotación), job batch en contenedor sobre MinIO versionado, pipeline KFP `quality-loop` local, Evidently | Kappa de ambos jueces reportado; el job batch produce el reporte desde MinIO; el pipeline reentrena o re-promptea ante una degradación inyectada; % de QA ahorrado medido | LLM-as-a-Judge, Industrial Evaluation, Quality Loop | — | L |
 | **M8 · Integraciones** | Contratos reales con P1 (`/decisions`) y P3 (`/ask`) | Con P1/P3 levantados, el dispatcher los usa; sin ellos, los mocks | Integrations | — | S |
-| **M9 · Pulido y publicación** | README completo, checkpoint en HF Hub, Space opcional, `v1.0` | Una persona ajena lo corre desde el README | Todo | — | M |
+| **M9 · Pulido y publicación** | README completo, checkpoint y dataset ES en HF Hub (si las licencias lo permiten), Space con System 1, `v1.0` | Una persona ajena lo corre desde el README | Todo | — | M |
 | M10 · `⏳ 16GB` | Langfuse self-hosted, B4 con un modelo de 4B, todo simultáneo | Resultados `v1.1` | Results | — | S |
 
 **MVP para el CV:** M0 → M5 (la cifra de cobertura y costo con System 2 incluido) + M7b parcial (`judgekit` con kappa y Langfuse).
@@ -560,7 +565,7 @@ smart-request-router/
 | ID | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|---|
 | **R1** | Laya es un proyecto nuevo (sept. 2026): API, documentación o checkpoints inmaduros o cambiantes | Media | Alto | Fijar versiones; aislar Laya detrás del puerto `DecisionModel` (`routercore/application/ports.py`); **plan B: Von o ModernBERT con cabezas multi-tarea** (misma interfaz) |
-| **R1b** | **Latencia de Laya en CPU** (hallazgo del curso C7): el fabricante reporta 193–464 ms por request y un reporte de la comunidad mide varios segundos en una laptop sin optimizar | Media | Alto | En M3: preload, ONNX int8, micro-lotes y entradas cortas; medir el p95 en el i5. Si el p95 supera 300 ms, usar **Von (OpenVINO CPU)** |
+| **R1b** | **Latencia de Laya en CPU** (hallazgo del curso C7): el fabricante reporta 193–464 ms por request y un reporte de la comunidad mide varios segundos en una laptop sin optimizar | Media | Alto | En M3: preload, ONNX int8, micro-lotes y entradas cortas; medir el p95 en el i5. Laya se mantiene mientras el p95 optimizado sea **< 1 s** (la meta sigue siendo < 300 ms); si lo supera, usar **Von (OpenVINO CPU)**. Von se mide igual como comparación en el README |
 | **R1c** | **Colapso con muchas opciones** (Banking77 con 77 opciones: 0.425 en Laya vs 0.870 en Jev) | Alta si se usan las 77 | Alto | Ya mitigado en el diseño: **~12 rutas**; sub-intención como segunda pregunta opcional |
 | **R1d** | **El checkpoint multilingüe viene sin calibrar** (ECE 0.314) y las preguntas `score` son las más débiles | Alta | Medio | Temperatura por idioma y por pregunta, con compuerta de ECE en la CI; la red de seguridad de urgencia no depende solo del `score` |
 | **R2** | La licencia de Banking77 no permite algún uso (p. ej., redistribuir la versión ES) | Baja | Medio | Verificar en M1; si no se puede redistribuir, publicar solo el script que la genera |
@@ -603,10 +608,10 @@ Langfuse self-hosted · baseline B4 con un modelo de 4B en simultáneo · todos 
 | Benchmarking de alineamiento, seguridad y marca | Rúbricas versionadas: tono de marca (guía de estilo de soporte fintech), seguridad (sin asesoría financiera, sin filtrar PII, sin prometer reembolsos), cumplimiento de la política de escalamiento | $0 |
 | Gating "listo para producción" | `judgekit gate`: umbrales en YAML → código de salida; corre en la CI (subset con `mock`) y antes de promover un modelo o un prompt | $0 |
 | Jobs de evaluación distribuida sobre datasets versionados en **S3** | El runner se empaqueta como contenedor y corre como **componente KFP** (`kfp.local`, `DockerRunner`) o con `docker run`, leyendo de **MinIO** (API S3, *object versioning* activado) y escribiendo los reportes de vuelta. **Sin SageMaker** (decisión del usuario): mismo patrón de *processing job*, infraestructura propia | $0 |
-| **Vertex AI Pipelines** que disparan reentrenamiento o *prompt tuning* | Pipeline KFP v2 `quality-loop`: evaluar → comparar con umbrales → si se degrada, **reentrenar Laya** (LoRA con el feedback) u **optimizar el prompt** del System 2 (búsqueda de variantes evaluadas por `judgekit`) → registrar en MLflow → compuerta. Corre local con `kfp.local` (`DockerRunner`); el YAML compilado es el mismo que se ejecuta en Vertex AI Pipelines durante la prueba final de P3 (único proyecto en GCP) | $0 local |
+| **Vertex AI Pipelines** que disparan reentrenamiento o *prompt tuning* | Pipeline KFP v2 `quality-loop`: evaluar → comparar con umbrales → si se degrada, **reentrenar Laya** (LoRA con el feedback) u **optimizar el prompt** del System 2 (búsqueda de variantes evaluadas por `judgekit`) → registrar en MLflow → compuerta → **promoción automática** a `production` si pasa; el modelo anterior queda con el alias `previous` para volver atrás con un comando. Corre local con `kfp.local` (`DockerRunner`); el YAML compilado es el mismo que se ejecuta en Vertex AI Pipelines durante la prueba final de P3 (único proyecto en GCP) | $0 local |
 | Monitoreo de modelos (drift semántico, observabilidad) | **Evidently**: drift de la distribución de intenciones, de la confianza y **drift semántico de embeddings** de los mensajes; reportes y *test suites* programados con cron local | $0 |
 | Gobernanza de datos | *Dataset cards*, manifiesto con hash de contenido por versión, linaje en MLflow (digest del dataset en cada corrida), escaneo de PII con Presidio antes de que un dato entre a un dataset, retención documentada | $0 |
-| "Reduce el QA manual hasta 90%" | Se **mide**: tiempo humano por caso (cronometrado al etiquetar el set de kappa) × casos vs tiempo del runner; se publica el % real | $0 |
+| "Reduce el QA manual hasta 90%" | Se **mide**: tiempo humano por caso (cronometrado al revisar los ejemplos de los resúmenes del modelo de frontera) × casos vs tiempo del runner; se publica el % real | $0 |
 
 ### 12.2 Langfuse como columna vertebral de la evaluación
 | Función de Langfuse | Uso en P2 |
@@ -616,7 +621,7 @@ Langfuse self-hosted · baseline B4 con un modelo de 4B en simultáneo · todos 
 | **Scores** | Métricas deterministas y del juez adjuntas a cada traza del agente |
 | **LLM-as-a-Judge gestionado** | Evaluadores sobre una muestra del tráfico en vivo (online eval), además del batch de `judgekit` (offline eval) |
 | **Prompt management** | Prompts del agente y de los jueces versionados; el pipeline de *prompt tuning* publica la nueva versión con etiqueta `candidate` |
-| **Annotation queues** | Etiquetado humano para el kappa juez↔humano |
+| **Annotation queues** | Etiquetas de referencia del modelo de frontera para el kappa juez↔referencia |
 
 Despliegue: **Langfuse Cloud (plan Hobby, gratis)** con datos sintéticos ahora; self-hosted en `⏳ 16GB` (la v3 pide ClickHouse, Postgres, Redis y blob storage: no entra en 8 GB junto con el stack).
 
@@ -641,13 +646,13 @@ packages/judgekit/
 | Métrica | Meta |
 |---|---|
 | Throughput del runner (evaluaciones por minuto) con `judge` local y con `judge_golden` | Se reporta |
-| Kappa juez local ↔ humano y juez golden ↔ humano | ≥ 0.6 para usar el juez en conclusiones |
+| Kappa juez local ↔ referencia y juez golden ↔ referencia (modelo de frontera) | ≥ 0.6 para usar el juez en conclusiones |
 | Reducción del tiempo de QA frente a revisión manual | Se reporta (el CV dice hasta 90%) |
 | `unsupported_claim_rate` del System 2 | Se reporta y tiene compuerta |
 | Tiempo desde que se degrada una métrica hasta que el pipeline propone un candidato | Se reporta |
 
 ### 12.5 Frase del CV (agregado)
-> … with an async **LLM-as-a-Judge** framework (asyncio · aiohttp · Pandas · HF Evaluate) validated against human labels (κ {k}), a **Gemma 4 31B golden evaluator**, Langfuse datasets/experiments, containerized evaluation jobs over versioned S3-compatible datasets and a KFP/Vertex AI quality loop that retrains or re-prompts on degradation — **{q}% less manual QA time**.
+> … with an async **LLM-as-a-Judge** framework (asyncio · aiohttp · Pandas · HF Evaluate) validated against a frontier-model reference (κ {k}), a **Gemma 4 31B golden evaluator**, Langfuse datasets/experiments, containerized evaluation jobs over versioned S3-compatible datasets and a KFP/Vertex AI quality loop that retrains or re-prompts on degradation — **{q}% less manual QA time**.
 
 ### 12.6 Decisiones pendientes y riesgos
 | Tema | Decisión / mitigación |
