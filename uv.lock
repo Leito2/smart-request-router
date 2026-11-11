@@ -3183,6 +3183,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+data = [
+    { name = "pyarrow" },
+]
 dev = [
     { name = "import-linter" },
     { name = "pytest" },
@@ -3196,6 +3199,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+data = [{ name = "pyarrow", specifier = ">=17" }]
 dev = [
     { name = "import-linter", specifier = ">=2.1" },
     { name = "pytest", specifier = ">=8" },

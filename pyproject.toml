@@ -18,6 +18,7 @@ judgekit = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.1"]
+data = ["pyarrow>=17"]            # training/fetch_banking77.py; not installed by CI
 
 [tool.ruff]
 line-length = 110
@@ -47,3 +48,4 @@ forbidden_modules = ["pydantic", "yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/routercore/tests", "packages/judgekit/tests", "tests"]
+pythonpath = ["training"]

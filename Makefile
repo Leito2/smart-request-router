@@ -12,6 +12,10 @@ up:        ## Start a profile: make up PROFILE=core|agent|ops
 	docker compose --profile $(PROFILE) up -d
 down:      ## Stop everything
 	docker compose --profile core --profile agent --profile ops down
+data:      ## Banking77 + Spanish translations (local Ollama) + hard cases + golden set candidates
+	uv run --group data python training/fetch_banking77.py
+	uv run python training/translate_es.py
+	uv run python training/make_dataset.py
 test:      ## Unit + contract tests
 	uv run pytest -q
 lint:      ## Lint + architecture dependency rule
@@ -19,5 +23,5 @@ lint:      ## Lint + architecture dependency rule
 	uv run lint-imports
 fmt:       ## Format
 	uv run ruff format .
-data train calibrate eval eval-full smoke surge-demo:   ## Implemented in later milestones (PLAN.md §10)
+train calibrate eval eval-full smoke surge-demo:   ## Implemented in later milestones (PLAN.md §10)
 	@echo "'$@' arrives in a later milestone — see PLAN.md §10"; exit 1
