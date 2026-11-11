@@ -15,8 +15,9 @@ def test_escalation_payload_follows_the_contract():
 def test_combine_replaces_escalated_predictions_with_system2_and_counts_calls():
     laya = [Prediction(route="cards", confidence=0.4, escalated=True),
             Prediction(route="fees", confidence=0.9)]
-    out = combine(laya, {0: ("disputes", 7)})
+    out = combine(laya, {0: ("disputes", 7, "critical")})
     assert out[0].route == "disputes" and out[0].llm_calls == 1 and out[0].tokens == 7
+    assert out[0].urgency == 3 and out[0].escalated is False
     assert out[1].route == "fees" and out[1].llm_calls == 0
 
 
@@ -27,3 +28,9 @@ def test_score_escalated_reports_both_accuracies_and_significance():
     result = score_escalated(rows, laya_routes, s2_routes)
     assert result["laya_accuracy"] == 0.0 and result["system2_accuracy"] == 1.0
     assert result["significant"] is True and result["n"] == 40
+
+
+def test_triage_fallback_stays_escalated_to_a_human():
+    laya = [Prediction(route="cards", urgency=2, escalated=True)]
+    out = combine(laya, {0: ("triage", 5, "high")})
+    assert out[0].escalated is True and out[0].urgency == 2

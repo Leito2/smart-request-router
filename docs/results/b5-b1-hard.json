@@ -1,0 +1,48 @@
+{
+  "model": "b1",
+  "set": "hard",
+  "threshold_set": "v0-placeholder",
+  "rows": 40,
+  "no_tools": false,
+  "escalated": 33,
+  "system2_latency_ms_p50": 8673.810200001753,
+  "fallback_rate": 0.030303030303030304,
+  "escalated_only": {
+    "n": 33,
+    "laya_accuracy": 0.42424242424242425,
+    "system2_accuracy": 0.36363636363636365,
+    "diff": -0.0606060606,
+    "ci95": [
+      -0.2727,
+      0.1212
+    ],
+    "significant": false
+  },
+  "end_to_end": {
+    "accuracy": 0.425,
+    "macro_f1": 0.3037,
+    "macro_f1_en": 0.3096,
+    "macro_f1_es": 0.4286,
+    "coverage": 1.0,
+    "selective_accuracy": 0.425,
+    "urgent_recall": 0.375,
+    "llm_calls_per_1k": 825.0,
+    "tokens_per_1k": 1244100.0,
+    "latency_p50_ms": 70.2042,
+    "latency_p95_ms": 70.7023
+  },
+  "system1_only": {
+    "accuracy": 0.475,
+    "macro_f1": 0.3321,
+    "macro_f1_en": 0.3113,
+    "macro_f1_es": 1.0,
+    "coverage": 0.175,
+    "selective_accuracy": 0.7143,
+    "urgent_recall": 1.0,
+    "ece": 0.2227,
+    "llm_calls_per_1k": 0.0,
+    "tokens_per_1k": 0.0,
+    "latency_p50_ms": 70.2042,
+    "latency_p95_ms": 70.7023
+  }
+}

@@ -32,16 +32,24 @@ def escalation_payload(row: dict, laya: dict, reason: str) -> dict:
     return {"escalation": {"message": message, "reason": reason, "laya": laya, "context": []}}
 
 
-def combine(laya: list[Prediction], system2: dict[int, tuple[str, int]]) -> list[Prediction]:
-    """System 2's route replaces Laya's on escalated rows (one LLM call each); the rest stay."""
+URGENCY_OF_PRIORITY = {"low": 0, "normal": 1, "high": 2, "critical": 3}
+
+
+def combine(laya: list[Prediction], system2: dict[int, tuple[str, int, str]]) -> list[Prediction]:
+    """System 2's route and priority replace Laya's on escalated rows (one LLM call each).
+    A `triage` fallback is a human queue: the row stays escalated."""
     out = []
     for i, p in enumerate(laya):
-        if i in system2:
-            route, tokens = system2[i]
-            out.append(Prediction(route=route, urgency=p.urgency, escalated=False, llm_calls=1,
-                                  tokens=tokens, latency_ms=p.latency_ms, confidence=None))
-        else:
+        if i not in system2:
             out.append(p)
+            continue
+        route, tokens, priority = system2[i]
+        if route == "triage":
+            out.append(Prediction(route=p.route, urgency=p.urgency, escalated=True, llm_calls=1,
+                                  tokens=tokens, latency_ms=p.latency_ms))
+        else:
+            out.append(Prediction(route=route, urgency=URGENCY_OF_PRIORITY[priority], escalated=False,
+                                  llm_calls=1, tokens=tokens, latency_ms=p.latency_ms))
     return out
 
 
@@ -99,29 +107,29 @@ def main() -> None:
                      model=os.environ.get("LLM_MODEL", "qwen3:1.7b"), api_key=os.environ.get("LLM_API_KEY"))
     agent = build_agent(llm, MockTools(), route_map.routes, max_steps=0 if args.no_tools else 6)
 
-    def resolve(i: int) -> tuple[int, str, float]:
+    def resolve(i: int) -> tuple[int, str, str, float]:
         a, reason = escalated[i]
         began = time.perf_counter()
         try:
             routed = agent.invoke(escalation_payload(rows[i], a.distributions, reason))["routed"]
-            route = routed["route"]
+            route, priority = routed["route"], routed["priority"]
         except Exception:
-            route = "triage"
-        return i, route, (time.perf_counter() - began) * 1000
+            route, priority = "triage", "high"
+        return i, route, priority, (time.perf_counter() - began) * 1000
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         resolved = list(pool.map(resolve, sorted(escalated)))
     tokens_per_call = llm.tokens / max(len(resolved), 1)
-    s2 = {i: (route, int(tokens_per_call)) for i, route, _ in resolved}
+    s2 = {i: (route, int(tokens_per_call), priority) for i, route, priority, _ in resolved}
 
     combined = combine(laya, s2)
     latency_p50 = sorted(ms for *_, ms in resolved)[len(resolved) // 2] if resolved else 0
     result = {"model": args.model, "set": args.dataset, "threshold_set": threshold_set, "rows": len(rows),
               "no_tools": args.no_tools, "escalated": len(escalated),
               "system2_latency_ms_p50": latency_p50,
-              "fallback_rate": sum(r == "triage" for _, r, _ in resolved) / max(len(resolved), 1),
+              "fallback_rate": sum(r == "triage" for _, r, *_ in resolved) / max(len(resolved), 1),
               "escalated_only": score_escalated(rows, {i: laya[i].route for i in escalated},
-                                                {i: r for i, (r, _) in s2.items()}) if resolved else None,
+                                                {i: r for i, (r, *_) in s2.items()}) if resolved else None,
               "end_to_end": {k: round(v, 4) for k, v in evaluate(rows, combined).items()},
               "system1_only": {k: round(v, 4) for k, v in evaluate(rows, laya).items()}}
     suffix = "-notools" if args.no_tools else ""
