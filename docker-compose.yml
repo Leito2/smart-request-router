@@ -53,6 +53,34 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     mem_limit: 700m   # semantic cache + guardrails ONNX models (P0 v2)
 
+  minio:
+    profiles: ["ops"]
+    image: minio/minio:latest               # pin before v1.0
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment: { MINIO_ROOT_USER: minioadmin, MINIO_ROOT_PASSWORD: minioadmin }
+    ports: ["9000:9000", "9001:9001"]
+    mem_limit: 200m
+
+  minio-init:                               # versioned bucket for datasets and reports
+    profiles: ["ops"]
+    image: minio/mc:latest
+    depends_on: [minio]
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 2; done
+        mc mb --ignore-existing local/router-eval
+        mc version enable local/router-eval
+    mem_limit: 50m
+
+  eval-batch:
+    profiles: ["batch"]                     # docker compose --profile batch run --rm eval-batch --router b0
+    build: { context: ., dockerfile: Dockerfile.eval }
+    depends_on: [minio-init]
+    environment: { S3_ENDPOINT: "http://minio:9000", S3_KEY: minioadmin, S3_SECRET: minioadmin }
+    mem_limit: 400m
+
   prometheus:
     profiles: ["ops"]
     image: prom/prometheus:latest           # pin before v1.0

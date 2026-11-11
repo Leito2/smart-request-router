@@ -21,6 +21,7 @@ from services.composition import ROOT
 from services.dispatcher.adapters import HttpKnowledgeBase, HttpPaymentDecisions
 from services.system2.adapters import GatewayLlm, LiveTools, RedisHistory
 from services.system2.graph import FALLBACK_ROUTE, build_agent
+from services.system2.tracing import from_env, trace_run
 
 log = logging.getLogger("system2")
 CONCURRENCY, TIMEOUT_S = 2, 20
@@ -48,6 +49,7 @@ def main() -> None:
                       HttpPaymentDecisions(os.environ.get("P1_URL", "http://localhost:8010")),
                       HttpKnowledgeBase(os.environ.get("P3_URL", "http://localhost:8010")))
     agent = build_agent(llm, tools, routes)
+    tracer = from_env()
     broker = os.environ.get("BROKER", "localhost:9092")
     consumer = Consumer({"bootstrap.servers": broker, "group.id": "router-system2",
                          "enable.auto.commit": False, "auto.offset.reset": "earliest"})
@@ -57,7 +59,8 @@ def main() -> None:
 
     def resolve(raw: dict) -> dict:
         Escalation.model_validate(raw)
-        return agent.invoke({"escalation": raw})["routed"]
+        return trace_run(tracer, "system2.resolve", raw, lambda: agent.invoke({"escalation": raw})["routed"],
+                         metadata=lambda routed: {"route": routed["route"], "priority": routed["priority"]})
 
     while True:
         message = consumer.poll(1.0)
