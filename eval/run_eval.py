@@ -49,7 +49,7 @@ def build_router(name: str, route_map, policy):
         model = LayaModel.load(
             route_map.routes, checkpoint=checkpoint, model_version=f"laya-{name}",
             calibration=load_calibration(calibration_path) if use_calibration else None,
-            supported_langs={"en", "es"})
+            supported_langs={"en", "es"}, device=os.environ.get("LAYA_DEVICE", "cpu"))
         return ModelRouter(model, policy)
     if name == "b4":
         base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434")

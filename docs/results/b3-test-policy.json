@@ -1,0 +1,21 @@
+{
+  "router": "b3",
+  "set": "test",
+  "policy": true,
+  "threshold_set": "v0-placeholder",
+  "rows": 600,
+  "metrics": {
+    "accuracy": 0.4967,
+    "macro_f1": 0.4107,
+    "macro_f1_en": 0.4144,
+    "macro_f1_es": 0.3411,
+    "coverage": 0.1183,
+    "selective_accuracy": 0.9155,
+    "urgent_recall": 1.0,
+    "ece": 0.034,
+    "llm_calls_per_1k": 0.0,
+    "tokens_per_1k": 0.0,
+    "latency_p50_ms": 333.3351,
+    "latency_p95_ms": 363.696
+  }
+}
