@@ -1,0 +1,42 @@
+{
+  "checkpoint": "models/laya_ft",
+  "rows": 200,
+  "gate": 0.995,
+  "fp32": {
+    "route": 1.0,
+    "urgency": 1.0,
+    "passes_gate": true,
+    "size_mb": 1290.5,
+    "batch1_ms_per_msg": {
+      "p50": 666.4,
+      "p95": 889.8
+    },
+    "batch8_ms_per_msg": {
+      "p50": 888.2,
+      "p95": 1065.0
+    },
+    "batch16_ms_per_msg": {
+      "p50": 1029.5,
+      "p95": 1062.6
+    }
+  },
+  "int8": {
+    "route": 0.75,
+    "urgency": 0.765,
+    "passes_gate": false,
+    "size_mb": 925.2,
+    "batch1_ms_per_msg": {
+      "p50": 475.4,
+      "p95": 635.4
+    },
+    "batch8_ms_per_msg": {
+      "p50": 733.7,
+      "p95": 766.3
+    },
+    "batch16_ms_per_msg": {
+      "p50": 765.2,
+      "p95": 765.9
+    }
+  },
+  "recommendation": "fp32"
+}

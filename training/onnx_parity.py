@@ -44,7 +44,7 @@ def main() -> None:
 
     exporter = str(ROOT / "training/vendor/laya_export_onnx.py")
     subprocess.run([sys.executable, exporter, "--model", args.checkpoint, "--output", str(fp32),
-                    "--quantize"], check=True)
+                    "--quantize", "--no-verify"], check=True)  # the agreement gate below is the verdict
 
     import laya
     from laya.onnx_agent import ONNXAgent
@@ -66,7 +66,8 @@ def main() -> None:
         entry = {q: round(agreement([top(r, q) for r in reference], [top(r, q) for r in results]), 4)
                  for q in ("route", "urgency")}
         entry["passes_gate"] = all(entry[q] >= GATE for q in ("route", "urgency"))
-        entry["size_mb"] = round(path.stat().st_size / 1e6, 1)
+        weights = path.with_name(path.name + ".data")  # fp32 graph keeps its weights beside the .onnx
+        entry["size_mb"] = round((path.stat().st_size + (weights.stat().st_size if weights.exists() else 0)) / 1e6, 1)
         for batch in (1, 8, 16):
             samples = []
             for start in range(0, min(len(texts), 64), batch):
