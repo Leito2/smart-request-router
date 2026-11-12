@@ -67,7 +67,8 @@ def main() -> None:
                  for q in ("route", "urgency")}
         entry["passes_gate"] = all(entry[q] >= GATE for q in ("route", "urgency"))
         weights = path.with_name(path.name + ".data")  # fp32 graph keeps its weights beside the .onnx
-        entry["size_mb"] = round((path.stat().st_size + (weights.stat().st_size if weights.exists() else 0)) / 1e6, 1)
+        total = path.stat().st_size + (weights.stat().st_size if weights.exists() else 0)
+        entry["size_mb"] = round(total / 1e6, 1)
         for batch in (1, 8, 16):
             samples = []
             for start in range(0, min(len(texts), 64), batch):
