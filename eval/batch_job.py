@@ -24,6 +24,19 @@ def load_dataset(s3, bucket: str, key: str) -> tuple[list[dict], str | None]:
     return [json.loads(line) for line in lines if line], response.get("VersionId")
 
 
+def ensure_bucket(s3, bucket: str) -> None:
+    """Versioned bucket: every upload of the dataset keeps its own VersionId, which the reports cite."""
+    try:
+        s3.create_bucket(Bucket=bucket)
+    except s3.exceptions.BucketAlreadyOwnedByYou:
+        pass
+    s3.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
+
+
+def upload_dataset(s3, bucket: str, key: str, path: Path) -> None:
+    s3.put_object(Bucket=bucket, Key=key, Body=path.read_bytes())
+
+
 def report_key(router: str, dataset: str, timestamp: str) -> str:
     return f"reports/{timestamp}-{router}-{dataset}.json"
 
@@ -52,11 +65,16 @@ def main() -> None:
     parser.add_argument("--router", default="b0")
     parser.add_argument("--dataset", default="golden/golden.jsonl")
     parser.add_argument("--policy", action="store_true")
+    parser.add_argument("--seed", action="store_true", help="create the versioned bucket, upload golden set")
     args = parser.parse_args()
 
     s3 = boto3.client("s3", endpoint_url=os.environ.get("S3_ENDPOINT", "http://localhost:9000"),
                       aws_access_key_id=os.environ.get("S3_KEY", "minioadmin"),
                       aws_secret_access_key=os.environ.get("S3_SECRET", "minioadmin"))
+    bucket = os.environ.get("S3_BUCKET", "router-eval")
+    if args.seed:
+        ensure_bucket(s3, bucket)
+        upload_dataset(s3, bucket, args.dataset, ROOT / "training" / "golden_set" / "golden.jsonl")
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
     policy, _ = load_policy(ROOT / "config" / "policy.yaml")
     router = build_router(args.router, route_map, policy if args.policy else None)

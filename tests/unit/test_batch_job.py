@@ -45,3 +45,48 @@ def test_run_batch_writes_a_report_that_cites_the_dataset_version():
                     bucket="router-eval", now="2026-11-11T10:00:00")
     report = json.loads(s3.objects[("router-eval", key)])
     assert report["dataset_version"] == "v7" and report["rows"] == 4 and report["metrics"]["accuracy"] == 1.0
+
+
+def test_ensure_bucket_creates_it_with_versioning_and_is_idempotent():
+    from batch_job import ensure_bucket
+
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def create_bucket(self, Bucket):
+            self.calls.append(("create", Bucket))
+
+        def put_bucket_versioning(self, Bucket, VersioningConfiguration):
+            self.calls.append(("versioning", VersioningConfiguration["Status"]))
+    s3 = Recorder()
+    ensure_bucket(s3, "router-eval")
+    assert s3.calls == [("create", "router-eval"), ("versioning", "Enabled")]
+
+
+def test_ensure_bucket_tolerates_an_existing_bucket():
+    from batch_job import ensure_bucket
+
+    class Existing:
+        class exceptions:
+            class BucketAlreadyOwnedByYou(Exception):
+                pass
+
+        def create_bucket(self, Bucket):
+            raise self.exceptions.BucketAlreadyOwnedByYou()
+
+        def put_bucket_versioning(self, Bucket, VersioningConfiguration):
+            self.versioned = True
+    s3 = Existing()
+    ensure_bucket(s3, "router-eval")
+    assert s3.versioned
+
+
+def test_upload_dataset_puts_the_file_under_the_key(tmp_path):
+    from batch_job import upload_dataset
+
+    path = tmp_path / "golden.jsonl"
+    path.write_bytes(golden_bytes(2))
+    s3 = FakeS3()
+    upload_dataset(s3, "router-eval", "golden/golden.jsonl", path)
+    assert s3.objects[("router-eval", "golden/golden.jsonl")] == golden_bytes(2)
