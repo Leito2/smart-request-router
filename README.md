@@ -21,8 +21,9 @@
 
 ## TL;DR — Results at a Glance
 
-All rows use the same harness (`eval/harness.py`), the same seeded subsets (`--limit` samples with seed 0) and the same
-labels. "Policy" = System 1 answers when confident, otherwise it escalates. Files are in [`docs/results/`](docs/results).
+All rows use the same harness (`eval/harness.py`) and labels; subsets are seeded (`--limit` samples with seed 0) and the
+size of each is in the table, so rows with different sizes are not strictly comparable. "π" = System 1 answers when
+confident, otherwise it escalates. Files are in [`docs/results/`](docs/results).
 
 | | Router | Set | Accuracy | Macro-F1 | S1 coverage | Selective acc. | Urgent recall | ECE | p95 latency |
 |---|---|---|---|---|---|---|---|---|---|
@@ -31,13 +32,19 @@ labels. "Policy" = System 1 answers when confident, otherwise it escalates. File
 | B1+π | SetFit + policy | test (600) | 0.765 | 0.689 | 0.50 | 0.920 | 0.956 | 0.026 | 9 ms |
 | B1+π | SetFit + policy | golden (500) | 0.744 | 0.725 | 0.41 | 0.857 | 1.000 | 0.042 | 11 ms |
 | B1+π | SetFit + policy | hard (394) | 0.594 | 0.488 | 0.35 | 0.676 | 0.973 | 0.104 | 18 ms |
-| B3+π | Laya, head fine-tuned (frozen encoder) + policy | test (600) | 0.497 | 0.411 | 0.12 | – | 1.000 | 0.034 | 364 ms |
-| B3+π | same | golden (500) | 0.416 | 0.405 | 0.09 | – | 1.000 | 0.059 | 404 ms |
+| B3+π* | Laya, head fine-tuned (frozen encoder) + policy | test (600) | 0.497 | 0.411 | 0.12 | 0.916 | 1.000 | 0.034 | 364 ms |
+| B3+π* | same | golden (500) | 0.416 | 0.405 | 0.09 | 0.756 | 1.000 | 0.059 | 404 ms |
 | B2 | Laya zero-shot (uncalibrated) | golden (500) | 0.402 | 0.375 | 1.00 | – | 0.611 | 0.292 | 385 ms |
 | B4 | LLM only (qwen3:1.7b, local, no thinking) | test (300) | 0.483 | 0.401 | 1.00 | – | 0.286 | – | 718 ms |
 
+\* B3+π was evaluated with the placeholder thresholds (`v0-placeholder`, tau 0.80), before threshold selection. The
+thresholds later chosen for Laya give only 3.4 % coverage at 90 % accuracy on validation (Part III), so these rows
+overstate Laya's coverage.
+
 Escalated cases only: System 2 vs System 1 on the hard set (100 cases, 66 escalated by SetFit's policy; paired
-bootstrap, 95 % CI). The last two rows are an earlier run with Laya's thresholds (80 cases, 76 escalated).
+bootstrap, 95 % CI). The last two rows are an earlier run with Laya's thresholds (80 cases, 76 escalated;
+`b5-b1-hard-qwen3-1.7b-laya-policy.json`, `b5-b1-hard-notools-qwen3-1.7b-laya-policy.json`), so tools vs no tools is
+compared under the same policy only in those two.
 
 | System 2 (local LLM) | Accuracy S1 → S2 | Difference | 95 % CI | Significant? | Fallback rate | S2 p50 |
 |---|---|---|---|---|---|---|
@@ -193,7 +200,10 @@ messages escalate. Thresholds belong to a model, so each has its own file (`conf
 | Model | Coverage @ 90 % acc (val) | tau / margin / tau_urgent / max_entropy |
 |---|---|---|
 | Laya (frozen encoder) | **3.4 %** | 0.775 / 0.0 / 0.017 / 0.6 |
-| SetFit | **47.3 %** | 0.625 / 0.2 / 0.218 / 1.01 |
+| SetFit | **47.3 %** | 0.625 / 0.2 / 0.218 / 1.01 (entropy/OOD rule effectively off: normalized entropy never exceeds 1) |
+
+The urgent-recall target (≥ 98 %) is met on validation but not on every evaluation sample for SetFit: 0.956 on the
+600-row test sample, 0.973 on hard, 1.0 on golden.
 
 **ONNX.** The fp32 graph agrees 100 % with PyTorch (route and urgency); **int8 agrees only 75 %**, so fp32 is what would
 ship (Laya warns that int8 hurts calibration). fp32 p95 on CPU: 0.89 s at batch 1, ≈ 1.1 s per message at batch 8–16.
@@ -209,10 +219,11 @@ candidate that passes the gate to `production` in an MLflow registry and keeps t
 **Harness.** One function (`eval/harness.py`) computes macro-F1 (overall, en, es), selective accuracy, coverage, urgent
 recall, ECE, LLM calls and tokens per 1k, and latency percentiles for any router, so B0–B5 are comparable.
 
-**Quality gate.** [`eval/ci_gate.py`](eval/ci_gate.py) runs a 100-case golden subset and fails when macro-F1 drops > 0.01, ECE rises
+**Quality gate.** [`eval/ci_gate.py`](eval/ci_gate.py) (default model: SetFit) runs a 100-case golden subset and fails when macro-F1 drops > 0.01, ECE rises
 > 0.02 or urgent recall < 0.98 ([`config/gates.yaml`](config/gates.yaml)). Verified both ways: it passes on the committed
-baseline and fails with `--degrade 0.3` (macro-F1 −0.164, ECE +0.135). The baseline in `eval/production_metrics.json` is
-the Laya checkpoint's; CI does not run the gate because the weights are not published (see Part VI).
+baseline and fails with `--degrade 0.3` (macro-F1 −0.22, ECE +0.17). The baseline in `eval/production_metrics.json` is
+SetFit's (macro-F1 0.645, coverage 0.35, urgent recall 1.0). GitHub CI does **not** run the gate: the weights are
+not in the repo, so the "a regressing PR fails CI" criterion is demonstrated locally only (see Part VI).
 
 **Judge validation.** [`eval/judge_validation.py`](eval/judge_validation.py) builds cases, collects a reference review, runs the
 judge, and computes Cohen's κ (target ≥ 0.6). **Not completed:** the reference review needs a strong model/human pass
@@ -241,11 +252,11 @@ thresholds; ≈ 950 with Laya's, whose coverage is 3–12 %).
 ```bash
 python scripts/doctor.py                     # prerequisites
 uv sync --all-packages --dev                 # + --group services --group ml --group mlops as needed
-uv run pytest -q                             # 150 tests
+uv run pytest -q                             # 151 tests
 uv run ruff check . && uv run lint-imports   # lint + Clean Architecture contracts
 
 make up PROFILE=core                         # Redpanda (pinned), Redis, Postgres, topics
-uv run python scripts/smoke.py --model rules --messages 600 --rate 20
+uv run python scripts/smoke.py --model rules --messages 600 --rate 20   # default model: setfit
 uv run python scripts/surge_demo.py --model rules
 make up PROFILE=agent                        # + llm-gateway (needs ../llm-gateway)
 
@@ -254,7 +265,7 @@ uv run python eval/run_system2.py --model b1 --set hard --limit 100    # B5 (set
 uv run python eval/ci_gate.py --model laya                              # regression gate
 ```
 
-Models are chosen with `MODEL=laya|setfit|rules` (services) or `--router b0…b4`. GPU runs of Laya use the CUDA torch
+Models are chosen with `MODEL=setfit|laya|rules` (services; default `setfit`) or `--router b0…b4`. GPU runs of Laya use the CUDA torch
 wheel; install it **outside the lock** and use `uv run --no-sync` afterwards.
 
 **Troubleshooting.**
@@ -271,7 +282,7 @@ wheel; install it **outside the lock** and use `uv run --no-sync` afterwards.
 
 **What worked.** The architecture: one routing core shared by every entry point; a policy that is explicit, testable and
 asymmetric; a stream pipeline that is idempotent and fast; surge detection and drift without labels; a gate that actually
-fails when quality drops; mocks that follow the real contracts. Calibration brought ECE under 0.05 for both models.
+fails when quality drops; mocks that follow the real contracts. Calibration brought Laya's validation ECE under 0.05 (0.029 route, 0.019 urgency); SetFit is used uncalibrated (ECE 0.026 test, 0.042 golden, but 0.104 on the hard set).
 
 **What did not.**
 
@@ -281,10 +292,17 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 2. **int8 ONNX is not usable** (75 % agreement); fp32 only.
 3. **System 2 did not significantly beat System 1** with the small local models available (qwen3:1.7b; gemma3:4b below).
    The harness, the paired-bootstrap gate and the agent work; a stronger model behind the gateway alias `smart_router` is the experiment to run.
-4. **Judge validation (κ ≥ 0.6)** needs the reference review; not done.
+4. **Golden-set review and judge validation (κ ≥ 0.6).** The 500 golden rows have no frontier-model/human review yet
+   (`review` is empty; steps in `training/golden_set/REVIEW.md`), so golden numbers are measured against the dataset's own
+   labels. The judge κ needs that reference review too; not done.
 5. **Langfuse tracing** is implemented (optional) but was not run against Langfuse Cloud (needs keys).
 6. **P1/P3 real services** were not available; adapters follow their published contracts and are tested against mocks.
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
+8. **Not done from PLAN:** git tag / Hugging Face Hub checkpoint, dataset and Space; the surge GIF (`docs/images/` is empty);
+   a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, Langfuse datasets/annotation and
+   QA-saved percentage from M7b; CI running the quality gate.
+9. **Streaming figures use the rules model** (`smoke.json`, `surge_demo.json`): they validate the plumbing and the
+   detector, not SetFit's or Laya's throughput. SetFit's own p95 is 9–18 ms offline.
 
 **Deviations from PLAN.** Frozen encoder instead of LoRA; Quix handles messages one by one rather than micro-batches of 16
 (ADR-3, the model call is not the bottleneck with SetFit); the gate baseline is the local Laya checkpoint rather than a

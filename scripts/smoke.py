@@ -3,7 +3,7 @@
 Needs `make up PROFILE=core`. Starts the mocks, dataflow and dispatcher as host processes, replays
 messages, then reads the topics back and reports coverage and p50/p95 latency.
 Writes docs/results/smoke.json.
-Usage: python scripts/smoke.py [--messages 300] [--rate 20] [--model laya|rules]
+Usage: python scripts/smoke.py [--messages 300] [--rate 20] [--model setfit|laya|rules]
 """
 import argparse
 import json
@@ -45,14 +45,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--messages", type=int, default=300)
     parser.add_argument("--rate", type=float, default=20)
-    parser.add_argument("--model", default="laya")
+    parser.add_argument("--model", default="setfit")
     args = parser.parse_args()
 
     env = {**os.environ, "MODEL": args.model, "PYTHONPATH": str(ROOT), "USE_TF": "0"}
     procs = [subprocess.Popen([sys.executable, "-m", module], cwd=ROOT, env=env)
              for module in ("services.mocks.main", "services.dataflow.main", "services.dispatcher.main")]
     try:
-        time.sleep(40 if args.model == "laya" else 20)           # model load + Quix partition assignment
+        time.sleep(20 if args.model == "rules" else 40)           # model load + Quix partition assignment
         subprocess.run([sys.executable, "-m", "services.replayer.main", "--rate", str(args.rate),
                         "--duration", str(args.messages / args.rate), "--broker", BROKER],
                        cwd=ROOT, env=env, check=True)

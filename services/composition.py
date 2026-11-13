@@ -1,7 +1,7 @@
 """Composition root shared by the API and the dataflow: config files + the chosen model → RouteMessages.
 
-MODEL=laya (default; calibrated checkpoint from models/ when present) | setfit (plan B, PLAN §11 R1: B1
-SetFit with its own policy.setfit.yaml) | rules (B0, no weights; smoke/CI).
+MODEL=setfit (default: the shipping System 1, PLAN §11 R1 plan B; B1 SetFit with policy.setfit.yaml)
+| laya (calibrated frozen-encoder fine-tune, policy.yaml) | rules (B0, no weights; smoke/CI).
 """
 import os
 import sys
@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def build_route_messages(model_name: str | None = None) -> RouteMessages:
-    model_name = model_name or os.environ.get("MODEL", "laya")
+    model_name = model_name or os.environ.get("MODEL", "setfit")
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
     policy, threshold_set = load_policy(policy_path(ROOT / "config", model_name))
     if model_name == "rules":

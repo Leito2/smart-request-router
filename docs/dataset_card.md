@@ -13,7 +13,7 @@
 - Verified on the built data: 0 origins in more than one split, 0 texts shared between test and train/val.
 
 ## Golden set (500)
-340 regular test rows balanced by (route, language) + 160 hard cases balanced by category. Candidates are in `training/golden_set/golden.jsonl`; each row has a `review` field filled by a frontier-model review (see `training/golden_set/REVIEW.md`). The kappa reference set is separate and arrives with `judgekit` (M7b).
+340 regular test rows balanced by (route, language) + 160 hard cases balanced by category. Candidates are in `training/golden_set/golden.jsonl`; each row has a `review` field that is **still empty**: the frontier-model review has not been run (see `training/golden_set/REVIEW.md` and `training/apply_review.py`). The kappa reference set is separate and arrives with `judgekit` (M7b).
 
 ## Known limits
 - Banking77 has no `general` or out-of-domain examples, so `training/general_train.py` adds ~100 greetings, thanks, tiny and off-topic messages (train/val only). A test keeps them disjoint from the evaluation hard cases.

@@ -70,7 +70,7 @@ def build_model(name: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="rules")
+    parser.add_argument("--model", default="setfit")
     parser.add_argument("--size", type=int, default=100)
     parser.add_argument("--update-baseline", action="store_true")
     parser.add_argument("--degrade", type=float, default=0.0, help="demo: flip this share of predictions")
