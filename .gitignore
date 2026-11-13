@@ -39,3 +39,5 @@ Thumbs.db
 .quix-state/
 mlflow.db
 mlflow-artifacts/
+
+state/*.log

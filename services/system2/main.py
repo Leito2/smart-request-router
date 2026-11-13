@@ -19,6 +19,7 @@ from routercore.adapters.route_map_config import load_route_map
 from routercore.application.contracts import Escalation, Routed
 from services.composition import ROOT
 from services.dispatcher.adapters import HttpKnowledgeBase, HttpPaymentDecisions
+from services.envfile import load_env
 from services.system2.adapters import GatewayLlm, LiveTools, RedisHistory
 from services.system2.graph import FALLBACK_ROUTE, build_agent
 from services.system2.tracing import from_env, trace_run
@@ -40,6 +41,7 @@ def fallback(escalation: dict, error: str) -> dict:
 
 
 def main() -> None:
+    load_env(ROOT / ".env")
     logging.basicConfig(level=logging.INFO)
     start_http_server(int(os.environ.get("METRICS_PORT", "8003")))
     routes = load_route_map(ROOT / "config" / "route_map.yaml").routes

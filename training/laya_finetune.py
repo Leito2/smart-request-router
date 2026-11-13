@@ -31,12 +31,25 @@ def write_jsonl(rows: list[dict], path: Path) -> None:
     path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
 
 
+def freeze_all_but_top(model, top: int) -> None:
+    """Leave only the last `top` encoder layers (and the head) trainable: embeddings are ~60% of the 322M."""
+    layers = len(model.encoder.layers)
+    for name, param in model.encoder.named_parameters():
+        keep = name.startswith("layers.") and int(name.split(".")[1]) >= layers - top
+        param.requires_grad_(keep)
+
+
 def main() -> None:
+    import laya.train as laya_train
     from laya.train import TrainConfig, finetune
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--full", action="store_true", help="also train the encoder (needs > 4 GB VRAM)")
+    parser.add_argument("--unfreeze-top", type=int, default=0,
+                        help="train only the last N encoder layers + head (fits 4 GB with N~8)")
+    parser.add_argument("--out", default="models/laya_ft", help="checkpoint dir, relative to the repo")
+    parser.add_argument("--report", default="docs/results/laya_finetune.json")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--micro-batch", type=int, default=8)
     parser.add_argument("--grad-accum", type=int, default=4)
@@ -52,14 +65,27 @@ def main() -> None:
     write_jsonl(train_rows[:args.limit] if args.limit else train_rows, data / "train.jsonl")
     write_jsonl(to_laya_rows(records, routes, split="val"), data / "val.jsonl")
 
+    if args.unfreeze_top:
+        # laya.train only filters the optimizer by requires_grad, so freezing after the load is enough
+        load_checkpoint = laya_train.load_checkpoint
+
+        def load_partially_frozen(model_dir):
+            model, tok, cfg = load_checkpoint(model_dir)
+            freeze_all_but_top(model, args.unfreeze_top)
+            return model, tok, cfg
+
+        laya_train.load_checkpoint = load_partially_frozen
+
+    train_encoder = args.full or args.unfreeze_top > 0
     config = TrainConfig(epochs=args.epochs, micro_batch=args.micro_batch, grad_accum=args.grad_accum,
-                         freeze_encoder=not args.full, shuffle_options=("choice",), max_len=args.max_len,
+                         freeze_encoder=not train_encoder, shuffle_options=("choice",), max_len=args.max_len,
                          eval_data=str(data / "val.jsonl"))
     started = time.perf_counter()
-    summary = finetune(str(data / "train.jsonl"), CHECKPOINT, str(ROOT / "models" / "laya_ft"), config,
+    summary = finetune(str(data / "train.jsonl"), CHECKPOINT, str(ROOT / args.out), config,
                        device=args.device)
     summary["train_seconds"] = round(time.perf_counter() - started, 1)
-    out = ROOT / "docs" / "results" / "laya_finetune.json"
+    summary["unfreeze_top"] = args.unfreeze_top
+    out = ROOT / args.report
     out.write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2, default=str)[:3000])
 
