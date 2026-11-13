@@ -176,7 +176,7 @@ not learned during a surge and one alert fires per surge (after `consecutive_win
 **Data.** Banking77 (77 intents, English) mapped to **12 routes** and a rule-based urgency 0–3
 ([`config/route_map.yaml`](config/route_map.yaml)); Spanish by translating a subset with a local LLM; plus hand-made
 "hard cases" (ambiguous, multi-intent, out-of-domain, urgent). 14,953 rows: train 10,487 / val 1,155 / test 3,311. A
-500-row golden set (278 en / 222 es / 36 urgent) and 394 hard cases are held out. See [`docs/dataset_card.md`](docs/dataset_card.md).
+497-row golden set (276 en / 221 es / 35 urgent, after a frontier-model review) and 394 hard cases are held out. See [`docs/dataset_card.md`](docs/dataset_card.md).
 Twelve routes are deliberate: Laya degrades with more than ~20 options (zero-shot on all 77 intents scores 0.425).
 
 **Baselines.** B0 keyword rules; B1 SetFit with an intent head and an urgency head (16 shots/class).
@@ -292,9 +292,11 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 2. **int8 ONNX is not usable** (75 % agreement); fp32 only.
 3. **System 2 did not significantly beat System 1** with the small local models available (qwen3:1.7b; gemma3:4b below).
    The harness, the paired-bootstrap gate and the agent work; a stronger model behind the gateway alias `smart_router` is the experiment to run.
-4. **Golden-set review and judge validation (κ ≥ 0.6).** The 500 golden rows have no frontier-model/human review yet
-   (`review` is empty; steps in `training/golden_set/REVIEW.md`), so golden numbers are measured against the dataset's own
-   labels. The judge κ needs that reference review too; not done.
+4. **Golden-set review and judge validation (κ ≥ 0.6).** The golden set got one frontier-model review pass (Claude
+   Fable 5.2, `training/golden_set/reviews.jsonl`): 467 ok, 30 fixed, 3 dropped → **497 rows**. It is a single model
+   pass, not a human review, and 12 of the fixes (sarcastic hard cases moved from `general` to a specific route) are
+   debatable; revert them in `reviews.jsonl` if `general` is the intended label. The golden tables above were measured
+   on the 500 **pre-review** labels and are being re-run. The judge κ reference review is still not done.
 5. **Langfuse tracing** is implemented (optional) but was not run against Langfuse Cloud (needs keys).
 6. **P1/P3 real services** were not available; adapters follow their published contracts and are tested against mocks.
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).

@@ -6,8 +6,8 @@
       "sha256": "0f24a30b65955fd727fadb0bf327e027d79b7ad0fc509e0c0725fcd59f215207"
     },
     "training/golden_set/golden.jsonl": {
-      "rows": 500,
-      "sha256": "aedf78c6bd5f1fb2915b10bd7e71d54cf8f333aff2d83712511866fba5ef94b9"
+      "rows": 497,
+      "sha256": "7b563a4ac57d9032695800155f0d06b2d63823424895563194dab4940b0b9356"
     },
     "training/golden_set/hard_cases.jsonl": {
       "rows": 394,
@@ -25,22 +25,26 @@
   "golden": {
     "by_route": {
       "account": 31,
-      "cards": 49,
-      "disputes": 34,
-      "fees": 40,
-      "fraud_inquiry": 28,
-      "general": 109,
+      "cards": 50,
+      "disputes": 38,
+      "fees": 42,
+      "fraud_inquiry": 30,
+      "general": 97,
       "knowledge": 37,
       "kyc": 31,
       "payments": 30,
-      "security": 35,
+      "security": 34,
       "topup": 38,
-      "transfers": 38
+      "transfers": 39
     },
     "by_lang": {
-      "en": 278,
-      "es": 222
+      "en": 276,
+      "es": 221
     },
-    "urgent_rows": 36
+    "urgent_rows": 35,
+    "review": {
+      "ok": 467,
+      "fix": 30
+    }
   }
 }
