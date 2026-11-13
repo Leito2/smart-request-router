@@ -1,0 +1,18 @@
+{
+  "surge_route": "payments",
+  "surge_factor": 5,
+  "detected": true,
+  "seconds_to_detect": 13.9,
+  "alert": [
+    {
+      "intent": "payments",
+      "window": 179454404,
+      "volume": 192,
+      "baseline": 2.88,
+      "zscore": 109.6,
+      "examples": [
+        "I have a pending payment from stuff I bought this morning."
+      ]
+    }
+  ]
+}
