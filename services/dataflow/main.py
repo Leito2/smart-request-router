@@ -27,10 +27,11 @@ LATENCY = Histogram("router_process_seconds", "Per-message processing time",
 def main() -> None:
     route = build_route_messages()
     start_http_server(int(os.environ.get("METRICS_PORT", "8001")))
+    # Quix emits output on each commit: a short interval keeps System 1 latency low (default is 5 s)
     app = Application(broker_address=os.environ.get("BROKER", "localhost:9092"),
                       consumer_group="router-dataflow", auto_offset_reset="earliest",
                       state_dir=os.environ.get("STATE_DIR", ".quix-state"),
-                      commit_interval=float(os.environ.get("COMMIT_INTERVAL_S", "0.5")))  # output flushes per commit
+                      commit_interval=float(os.environ.get("COMMIT_INTERVAL_S", "0.5")))
     inbound = app.topic("inbound-messages", key_deserializer="str", value_deserializer="json")
     outputs = {name: app.topic(name, key_serializer="str", value_serializer="json") for name in OUT_TOPICS}
 
