@@ -30,7 +30,7 @@ def main() -> None:
     app = Application(broker_address=os.environ.get("BROKER", "localhost:9092"),
                       consumer_group="router-dataflow", auto_offset_reset="earliest",
                       state_dir=os.environ.get("STATE_DIR", ".quix-state"),
-                      commit_interval=float(os.environ.get("COMMIT_INTERVAL_S", "0.5")))  # Quix flushes output per commit (default 5 s)
+                      commit_interval=float(os.environ.get("COMMIT_INTERVAL_S", "0.5")))  # output flushes per commit
     inbound = app.topic("inbound-messages", key_deserializer="str", value_deserializer="json")
     outputs = {name: app.topic(name, key_serializer="str", value_serializer="json") for name in OUT_TOPICS}
 

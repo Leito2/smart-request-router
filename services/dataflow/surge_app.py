@@ -31,7 +31,7 @@ def main() -> None:
     start_http_server(int(os.environ.get("METRICS_PORT", "8002")))
     app = Application(broker_address=os.environ.get("BROKER", "localhost:9092"),
                       consumer_group="router-surge", auto_offset_reset="earliest",
-                      commit_interval=float(os.environ.get("COMMIT_INTERVAL_S", "0.5")))  # Quix flushes output per commit (default 5 s)
+                      commit_interval=float(os.environ.get("COMMIT_INTERVAL_S", "0.5")))  # output flushes per commit
     alerts = app.topic("alerts", key_serializer="str", value_serializer="json")
 
     def observe(value: dict, key, timestamp_ms: int, headers) -> list[dict]:
