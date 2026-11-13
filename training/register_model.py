@@ -1,8 +1,8 @@
 """Log the current candidate (calibration + training report) to MLflow and register it as `laya-router`.
 
 Usage: python training/register_model.py [--tracking-uri sqlite:///mlflow.db]
-Prints the new model version. The weights themselves stay in models/ (too large for the tracking store); the
-registered artifact is the small bundle that identifies the candidate: calibration, training report, thresholds.
+Prints the new model version. The weights stay in models/ (too large for the tracking store); the registered
+artifact is the small bundle that identifies the candidate: calibration, training report, thresholds.
 """
 import argparse
 from pathlib import Path

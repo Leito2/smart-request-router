@@ -38,7 +38,8 @@ def main() -> None:
     args = parser.parse_args()
     sys.executable = shell_safe(sys.executable)
     local.init(runner=local.SubprocessRunner(use_venv=False))
-    run = quality_loop(repo=shell_safe(str(ROOT)), model=args.model, degrade=args.degrade, version=args.version)
+    repo = shell_safe(str(ROOT))
+    run = quality_loop(repo=repo, model=args.model, degrade=args.degrade, version=args.version)
     print("pipeline finished:", run)
 
 
