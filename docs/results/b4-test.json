@@ -2,18 +2,19 @@
   "router": "b4",
   "set": "test",
   "policy": false,
-  "threshold_set": "v0-placeholder",
-  "rows": 150,
+  "threshold_set": "v1-t0.775-m0.0-u0.0168-e0.6",
+  "rows": 300,
   "metrics": {
-    "accuracy": 0.4333,
-    "macro_f1": 0.1511,
-    "macro_f1_en": 0.1511,
+    "accuracy": 0.4833,
+    "macro_f1": 0.4012,
+    "macro_f1_en": 0.4089,
+    "macro_f1_es": 0.225,
     "coverage": 1.0,
-    "selective_accuracy": 0.4333,
-    "urgent_recall": 1.0,
+    "selective_accuracy": 0.4833,
+    "urgent_recall": 0.2857,
     "llm_calls_per_1k": 1000.0,
-    "tokens_per_1k": 283280.0,
-    "latency_p50_ms": 638.3429,
-    "latency_p95_ms": 733.85
+    "tokens_per_1k": 284196.6667,
+    "latency_p50_ms": 639.0096,
+    "latency_p95_ms": 717.9468
   }
 }

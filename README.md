@@ -33,14 +33,21 @@ labels. "Policy" = System 1 answers when confident, otherwise it escalates. File
 | B1+π | SetFit + policy | hard (394) | 0.594 | 0.488 | 0.35 | 0.676 | 0.973 | 0.104 | 18 ms |
 | B3+π | Laya, head fine-tuned (frozen encoder) + policy | test (600) | 0.497 | 0.411 | 0.12 | – | 1.000 | 0.034 | 364 ms |
 | B3+π | same | golden (500) | 0.416 | 0.405 | 0.09 | – | 1.000 | 0.059 | 404 ms |
-| B4 | LLM only (qwen3:1.7b, local) | test (150) | 0.433 | 0.151 | 1.00 | – | 1.000 | – | 734 ms |
+| B2 | Laya zero-shot (uncalibrated) | golden (500) | 0.402 | 0.375 | 1.00 | – | 0.611 | 0.292 | 385 ms |
+| B4 | LLM only (qwen3:1.7b, local, no thinking) | test (300) | 0.483 | 0.401 | 1.00 | – | 0.286 | – | 718 ms |
 
-Escalated cases only (System 2 vs System 1 on the 76 of 80 hard cases that escalated; paired bootstrap, 95 % CI):
+Escalated cases only: System 2 vs System 1 on the hard set (100 cases, 66 escalated by SetFit's policy; paired
+bootstrap, 95 % CI). The last two rows are an earlier run with Laya's thresholds (80 cases, 76 escalated).
 
-| System 2 | Accuracy S1 → S2 | Difference | 95 % CI | Significant? |
-|---|---|---|---|---|
-| qwen3:1.7b, with tools | 0.500 → 0.539 | +3.9 pp | [−6.6, +14.5] | no |
-| qwen3:1.7b, no tools | 0.500 → 0.487 | −1.3 pp | [−13.2, +9.2] | no |
+| System 2 (local LLM) | Accuracy S1 → S2 | Difference | 95 % CI | Significant? | Fallback rate | S2 p50 |
+|---|---|---|---|---|---|---|
+| qwen3:1.7b, with tools | 0.439 → 0.500 | +6.1 pp | [−6.1, +18.2] | no | 0 % | 5.9 s |
+| gemma3:4b, with tools | 0.439 → 0.091 | −34.8 pp | [−47.0, −22.7] | – | **77 %** | 51 s |
+| qwen3:1.7b, with tools (Laya policy) | 0.500 → 0.539 | +3.9 pp | [−6.6, +14.5] | no | 1 % | 8.8 s |
+| qwen3:1.7b, no tools (Laya policy) | 0.500 → 0.487 | −1.3 pp | [−13.2, +9.2] | no | 8 % | 4.3 s |
+
+gemma3:4b is not a quality result: on a 4 GB GPU it takes ~51 s per case, so 77 % of cases hit the 20 s timeout and
+fall back to the `triage` queue. End to end (qwen3, SetFit policy) the hard set reaches accuracy 0.56 with 660 LLM calls per 1k messages.
 
 Infrastructure results: [`smoke.json`](docs/results/smoke.json), [`surge_demo.json`](docs/results/surge_demo.json),
 [`onnx_parity.json`](docs/results/onnx_parity.json), [`drift.json`](docs/results/drift.json),
