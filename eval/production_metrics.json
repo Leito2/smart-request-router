@@ -1,0 +1,15 @@
+{
+  "model": "laya",
+  "accuracy": 0.39,
+  "macro_f1": 0.3943447288537956,
+  "macro_f1_en": 0.39526353276353277,
+  "macro_f1_es": 0.356036556036556,
+  "coverage": 0.0,
+  "selective_accuracy": 0.0,
+  "urgent_recall": 1.0,
+  "ece": 0.05521918485179254,
+  "llm_calls_per_1k": 0.0,
+  "tokens_per_1k": 0.0,
+  "latency_p50_ms": 699.9062249997223,
+  "latency_p95_ms": 896.7175562502234
+}

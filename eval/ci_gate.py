@@ -16,6 +16,7 @@ from routers import ModelRouter
 
 from judgekit.gate import Rule, load_rules
 from judgekit.gate import evaluate as check_rules
+from routercore.adapters.policy_config import load_policy
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "training"))
@@ -74,7 +75,8 @@ def main() -> None:
     golden = [json.loads(line) for line in
               (ROOT / "training/golden_set/golden.jsonl").read_text(encoding="utf-8").splitlines() if line]
     subset = select_ci_subset(golden, args.size)
-    predictions = ModelRouter(build_model(args.model), None).predict(subset)
+    policy, _ = load_policy(ROOT / "config" / "policy.yaml")   # judge the whole system, safety net included
+    predictions = ModelRouter(build_model(args.model), policy).predict(subset)
     if args.degrade:
         labels = sorted({r["route"] for r in golden})
         flipped = degrade_routes([p.route for p in predictions], labels, share=args.degrade, seed=0)
