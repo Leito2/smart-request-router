@@ -52,7 +52,7 @@ def main() -> None:
     procs = [subprocess.Popen([sys.executable, "-m", module], cwd=ROOT, env=env)
              for module in ("services.mocks.main", "services.dataflow.main", "services.dispatcher.main")]
     try:
-        time.sleep(25 if args.model == "laya" else 8)           # model load + consumer group join
+        time.sleep(40 if args.model == "laya" else 20)           # model load + Quix partition assignment
         subprocess.run([sys.executable, "-m", "services.replayer.main", "--rate", str(args.rate),
                         "--duration", str(args.messages / args.rate), "--broker", BROKER],
                        cwd=ROOT, env=env, check=True)

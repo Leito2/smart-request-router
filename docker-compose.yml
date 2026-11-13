@@ -5,7 +5,7 @@ x-core: &core
 services:
   redpanda:
     <<: *core
-    image: redpandadata/redpanda:latest      # pin in M4
+    image: redpandadata/redpanda:v26.2.7
     command: ["redpanda", "start", "--smp", "1", "--memory", "512M", "--overprovisioned",
               "--node-id", "0", "--check=false",
               "--kafka-addr", "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092",
@@ -15,7 +15,7 @@ services:
 
   redpanda-init:
     <<: *core
-    image: redpandadata/redpanda:latest      # pin in M4
+    image: redpandadata/redpanda:v26.2.7
     depends_on: [redpanda]
     restart: "no"
     entrypoint: ["/bin/bash", "-c"]
