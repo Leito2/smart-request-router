@@ -1,9 +1,11 @@
 """Stage and publish the dataset and the SetFit System 1 to the Hugging Face Hub (PLAN M9).
 
 Usage: python scripts/publish_hf.py --user WhiteUniversal            # stage only, prints what would go up
-       python scripts/publish_hf.py --user WhiteUniversal --upload   # create PUBLIC repos and upload (needs `hf auth login`)
+       python scripts/publish_hf.py --user WhiteUniversal --upload   # create PUBLIC repos and upload
+Upload needs `hf auth login` first.
 Repos: <user>/smart-request-router-dataset and <user>/smart-request-router-setfit.
 """
+# ruff: noqa: E501  (the Hub cards below are prose that the Hub wraps itself)
 import argparse
 import shutil
 import tempfile
