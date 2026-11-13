@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A System 1 / System 2 support-message router for a fintech: a calibrated decision model ("Laya", CPU) resolves most messages; uncertain, urgent or out-of-distribution ones escalate to a LangGraph agent. Quix Streams (on Redpanda/Kafka) adds per-customer context and surge detection. The repo is at **M0 (bootstrap)** — only the shared packages and infra scaffolding exist; everything under `services/`, `eval/`, `training/`, `tests/` is an empty `.gitkeep` placeholder.
+A System 1 / System 2 support-message router for a fintech: a calibrated decision model resolves most messages; uncertain, urgent or out-of-distribution ones escalate to a LangGraph agent. Quix Streams (on Redpanda/Kafka) adds per-customer context and surge detection. **M1–M9 are implemented** (v1.0 candidate): `services/`, `eval/`, `training/`, `scripts/`, `pipelines/`, `observability/` all exist. [`README.md`](README.md) holds the measured results, including the negative ones: Laya with a frozen encoder (4 GB GPU) loses to the SetFit baseline, so **SetFit is the working System 1** (`MODEL=setfit`, PLAN risk R1); small local LLMs as System 2 do not significantly beat System 1. The full Laya fine-tune notebook (`training/notebooks/laya_full_ft.ipynb`) has not been run.
 
 [`PLAN.md`](PLAN.md) (Spanish) is the source of truth for design: architecture/ADRs (§2), components (§3), model/calibration (§4), evaluation harness (§5), resource budget (§7), milestones with acceptance criteria (§10), risks (§11), `judgekit` (§12). Check §10 before implementing — each milestone defines what is in scope and which README sections it feeds. README is written progressively (concepts/macro first, technical detail last in each component).
 
@@ -26,7 +26,7 @@ uv run judgekit gate <rules.yaml> <metrics.json>   # quality gate CLI (exit 1 on
 
 `uv.lock` is committed and CI installs with `uv sync --locked`, so any dependency change in a `pyproject.toml` must ship with the regenerated `uv.lock` (`uv lock`) or CI fails at install.
 
-`make data|train|calibrate|eval|eval-full|smoke|surge-demo` are deliberate stubs that exit 1 until their milestone (PLAN §10) lands. Ruff: line length 110, rules `E,F,I,UP,B`. pytest `testpaths` are the two package test dirs plus top-level `tests/`.
+`make data|train|calibrate|eval|eval-full|smoke|surge-demo` are real targets. GPU runs of Laya must use `uv run --no-sync` (the venv holds CUDA torch installed outside the lock). Eval scripts need `PYTHONPATH=.:eval:training` (the Makefile exports it). Ruff: line length 110, rules `E,F,I,UP,B`. pytest `testpaths` are the two package test dirs plus top-level `tests/`.
 
 ## Architecture
 
@@ -41,4 +41,6 @@ uv workspace (`packages/*`) with two libraries, both depended on by the root pro
 
 Runtime config lives in `config/`: `policy.yaml` (thresholds + `threshold_set` id, written by `training/choose_thresholds.py` on the validation risk–coverage curve — rerun it after any new checkpoint/calibration), `route_map.yaml` (~12 routes; kept small on purpose because Laya degrades with >20 options), `surge.yaml` (EWMA surge detector params). `Policy` dataclass defaults are independent test fixtures (no longer mirrored from `policy.yaml`).
 
-Planned (not yet built) services, per PLAN §3: replayer → Redpanda → Quix Streams dataflow (dedupe, per-customer grouping, Laya call, surge windows) → dispatcher / System 2 LangGraph worker → API. `docker-compose.yml` currently defines only the infra (Redpanda, Redis, Postgres in `core`; `llm-gateway` in `agent`/`ops`; Grafana in `ops`) with memory limits sized for an 8 GB machine — preserve those limits. `llm-gateway` builds from a sibling repo (`../llm-gateway`).
+Services (`services/`): `replayer` → Redpanda → `dataflow` (Quix; dedupe, per-customer context, System 1, `routed`/`escalations`/`dlq`; `surge_app` for windows) → `dispatcher` (idempotent by `message_id`; Redis queues, P3 SSE, P1 HTTP, Postgres log) and `system2` (LangGraph worker); `api` (`/route`, `/messages`); `mocks` (P1/P3 with the real contracts); `composition.py` picks the model with `MODEL=laya|setfit|rules`. **Thresholds belong to a model:** `config/policy.yaml` is Laya's, `config/policy.setfit.yaml` SetFit's (`policy_config.policy_path`); regenerate with `training/choose_thresholds.py --model laya|setfit` after any retrain. Quix emits output on each commit, so `COMMIT_INTERVAL_S` (default 0.5) drives latency.
+
+`docker-compose.yml` profiles: `core` (Redpanda pinned, Redis, Postgres, topic init), `agent` (`llm-gateway` from `../llm-gateway`), `ops` (S3 store — moto, since MinIO stopped publishing images —, Prometheus, Grafana), `batch` (versioned eval job). Memory limits are sized for an 8 GB machine — preserve them. KFP's local runner does not work on Windows (backslash paths); the pipeline compiles to `pipelines/quality_loop.yaml`.

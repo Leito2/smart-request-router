@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := help
 PROFILE ?= core
+export PYTHONPATH := .:eval:training
+export PYTHONIOENCODING := utf-8
 .PHONY: help doctor setup up down test lint fmt data train calibrate eval eval-full smoke surge-demo
 
 help:      ## List targets
@@ -27,5 +29,14 @@ smoke:     ## End-to-end System 1 stream (needs `make up`): coverage and p95
 	uv run python scripts/smoke.py
 surge-demo: ## Inject `payments` x5 and show the surge alert (needs `make up`)
 	uv run python scripts/surge_demo.py
-train calibrate eval eval-full:   ## Implemented in later milestones (PLAN.md §10)
-	@echo "'$@' arrives in a later milestone — see PLAN.md §10"; exit 1
+train:     ## Fine-tune Laya (frozen encoder, GPU) -> calibrate -> choose thresholds
+	uv run --no-sync python training/laya_finetune.py --epochs 2 --device cuda
+	uv run --no-sync python training/calibrate.py --checkpoint models/laya_ft --device cuda
+	uv run --no-sync python training/choose_thresholds.py --device cuda
+calibrate: ## Temperature scaling + thresholds on the validation split only
+	uv run --no-sync python training/calibrate.py --checkpoint models/laya_ft --device cuda
+	uv run --no-sync python training/choose_thresholds.py --device cuda
+eval:      ## Quick evaluation (seeded 600-row samples): B1 with policy on golden/hard/test
+	for s in golden hard test; do uv run --no-sync python eval/run_eval.py --router b1 --set $$s --policy --limit 600; done
+eval-full: ## Full sets for every baseline (slow; Laya needs LAYA_DEVICE=cuda)
+	for r in b0 b1 b3; do for s in golden hard test; do uv run --no-sync python eval/run_eval.py --router $$r --set $$s --policy; done; done
