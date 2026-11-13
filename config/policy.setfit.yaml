@@ -1,0 +1,7 @@
+# Chosen by training/choose_thresholds.py (setfit) on the validation risk-coverage curve.
+threshold_set: v1-t0.625-m0.2-u0.2179-e1.01
+tau: 0.625
+margin: 0.2
+tau_urgent: 0.2179
+max_entropy: 1.01
+temperatures: {}        # per language and question, fitted on validation data (models/calibration.json)
