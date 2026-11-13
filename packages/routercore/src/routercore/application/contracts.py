@@ -26,6 +26,8 @@ class Routed(BaseModel):
     threshold_set: str
     ts_routed_ns: int
     text: str | None = None                 # carried so the dispatcher can query P1/P3 without a join
+    rationale: str | None = None            # System 2 only: why it chose this route
+    evidence: list[str] = Field(default_factory=list)    # System 2 only: tool results it relied on
 
 
 class Escalation(BaseModel):

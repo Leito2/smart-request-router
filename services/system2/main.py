@@ -16,7 +16,7 @@ from confluent_kafka import Consumer, Producer
 from prometheus_client import Counter, Histogram, start_http_server
 
 from routercore.adapters.route_map_config import load_route_map
-from routercore.application.contracts import Escalation
+from routercore.application.contracts import Escalation, Routed
 from services.composition import ROOT
 from services.dispatcher.adapters import HttpKnowledgeBase, HttpPaymentDecisions
 from services.system2.adapters import GatewayLlm, LiveTools, RedisHistory
@@ -33,10 +33,10 @@ S2_TOKENS = Counter("s2_tokens_total", "LLM tokens spent by System 2")
 
 def fallback(escalation: dict, error: str) -> dict:
     message = escalation["message"]
-    return {"message_id": message["message_id"], "route": FALLBACK_ROUTE, "priority": "high",
-            "decided_by": "system2", "confidence": 0.0, "model_version": "system2-fallback",
-            "threshold_set": "s2", "ts_routed_ns": 0, "text": message["text"],
-            "rationale": f"fallback: {error}", "evidence": []}
+    return Routed(message_id=message["message_id"], route=FALLBACK_ROUTE, priority="high",
+                  decided_by="system2", confidence=0.0, model_version="system2-fallback",
+                  threshold_set="s2", ts_routed_ns=0, text=message["text"],
+                  rationale=f"fallback: {error}").model_dump()
 
 
 def main() -> None:

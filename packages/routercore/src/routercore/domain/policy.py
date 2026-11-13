@@ -1,5 +1,5 @@
 """System 1 / System 2 policy (course 06/34 note 05). Thresholds come from config/policy.yaml
-(loaded by routercore.adapters.policy_config); the defaults here mirror it for tests."""
+(loaded by routercore.adapters.policy_config); the defaults here are independent test fixtures."""
 import math
 from dataclasses import dataclass
 

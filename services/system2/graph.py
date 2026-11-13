@@ -6,7 +6,7 @@ The LLM is a plain callable (system, user) -> text, so the gateway, a local mode
 import json
 import time
 from collections.abc import Callable
-from typing import Any, Protocol, TypedDict
+from typing import Protocol, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -112,11 +112,9 @@ def build_agent(llm: Llm, tools: Tools, routes: dict[str, str], *, max_steps: in
             message_id=message.message_id, route=d["route"] if d else FALLBACK_ROUTE,
             priority=d["priority"] if d else "high", decided_by="system2", confidence=1.0 if d else 0.0,
             model_version=model_version, threshold_set=threshold_set, ts_routed_ns=now_ns(),
-            text=message.text)
-        out: dict[str, Any] = routed.model_dump()
-        out["rationale"] = d["rationale"] if d else "fallback: no valid decision"
-        out["evidence"] = d.get("evidence", []) if d else []
-        return {"routed": out}
+            text=message.text, rationale=d["rationale"] if d else "fallback: no valid decision",
+            evidence=d.get("evidence", []) if d else [])
+        return {"routed": routed.model_dump()}
 
     graph = StateGraph(State)
     graph.add_node("analyze", analyze)
