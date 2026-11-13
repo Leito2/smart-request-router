@@ -85,53 +85,62 @@ def calibrated(raw: list[dict], calibration: dict) -> list[dict]:
     return out
 
 
-def write_policy(result: dict, path: Path) -> None:
+def write_policy(result: dict, path: Path, model: str = "laya") -> None:
     p = result["policy"]
     set_id = f"v1-t{p['tau']}-m{p['margin']}-u{p['tau_urgent']}-e{p['max_entropy']}"
     path.write_text(
-        "# Chosen by training/choose_thresholds.py on the validation risk-coverage curve (PLAN §4.5).\n"
+        f"# Chosen by training/choose_thresholds.py ({model}) on the validation risk-coverage curve.\n"
         f"threshold_set: {set_id}\ntau: {p['tau']}\nmargin: {p['margin']}\ntau_urgent: {p['tau_urgent']}\n"
         f"max_entropy: {p['max_entropy']}\ntemperatures: {{}}        # per language and question, "
         "fitted on validation data (models/calibration.json)\n", encoding="utf-8")
 
 
-def collect_raw(checkpoint: str, device: str) -> list[dict]:
+def collect_raw(checkpoint: str, device: str, model_name: str = "laya") -> list[dict]:
     from calibrate import collect
-
-    from routercore.adapters.laya_model import LayaModel
-    from routercore.adapters.route_map_config import load_route_map
 
     rows = [json.loads(line) for line in (ROOT / "training/data/dataset.jsonl").read_text(
         encoding="utf-8").splitlines() if line]
     rows = [r for r in rows if r["split"] == "val"]
-    model = LayaModel.load(load_route_map(ROOT / "config" / "route_map.yaml").routes, checkpoint=checkpoint,
-                           device=device, model_version="laya-thresholds")
+    if model_name == "setfit":
+        from baselines.setfit_model import SetFitRouter
+        model = SetFitRouter.load(ROOT / "models" / "b1_setfit")
+    else:
+        from routercore.adapters.laya_model import LayaModel
+        from routercore.adapters.route_map_config import load_route_map
+        model = LayaModel.load(load_route_map(ROOT / "config" / "route_map.yaml").routes,
+                               checkpoint=checkpoint, device=device, model_version="laya-thresholds")
     return [{"lang": rec["lang"], "route_p": rec["intent"][0], "route": rec["intent"][1],
              "urgency_p": rec["urgency"][0], "urgency": rec["urgency"][1]} for rec in collect(model, rows)]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", choices=["laya", "setfit"], default="laya")
     parser.add_argument("--checkpoint", default=str(ROOT / "models" / "laya_ft"))
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--target-accuracy", type=float, default=0.90)
     parser.add_argument("--min-urgent-recall", type=float, default=0.98)
-    parser.add_argument("--cache", action="store_true", help="reuse models/val_assessments.json")
+    parser.add_argument("--cache", action="store_true", help="reuse the cached validation assessments")
     args = parser.parse_args()
 
-    cache = ROOT / "models" / "val_assessments.json"
+    cache = ROOT / "models" / f"val_assessments.{args.model}.json"
     if args.cache and cache.exists():
         raw = json.loads(cache.read_text(encoding="utf-8"))
     else:
-        raw = collect_raw(args.checkpoint, args.device)
+        raw = collect_raw(args.checkpoint, args.device, args.model)
         cache.write_text(json.dumps(raw), encoding="utf-8")
-    calibration = json.loads((ROOT / "models" / "calibration.json").read_text(encoding="utf-8"))
-    result = choose(calibrated(raw, calibration), target_accuracy=args.target_accuracy,
-                    min_urgent_recall=args.min_urgent_recall)
-    result["checkpoint"] = args.checkpoint
-    (ROOT / "docs" / "results" / "thresholds.json").write_text(json.dumps(result, indent=2) + "\n",
-                                                               encoding="utf-8")
-    write_policy(result, ROOT / "config" / "policy.yaml")
+    if args.model == "laya":
+        calibration = json.loads((ROOT / "models" / "calibration.json").read_text(encoding="utf-8"))
+        records = calibrated(raw, calibration)
+    else:
+        records = raw                       # SetFit's probabilities are used as they come (ECE ~0.03 on val)
+    result = choose(records, target_accuracy=args.target_accuracy, min_urgent_recall=args.min_urgent_recall)
+    result["model"] = args.model
+    result["checkpoint"] = args.checkpoint if args.model == "laya" else "models/b1_setfit"
+    suffix = "" if args.model == "laya" else ".setfit"
+    report = ROOT / "docs" / "results" / f"thresholds{suffix}.json"
+    report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    write_policy(result, ROOT / "config" / f"policy{suffix}.yaml", args.model)
     print(json.dumps(result, indent=2))
 
 

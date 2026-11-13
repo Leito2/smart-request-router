@@ -58,7 +58,7 @@ def main() -> None:
     sys.path.insert(0, str(ROOT / "training"))
     from run_eval import build_router
 
-    from routercore.adapters.policy_config import load_policy
+    from routercore.adapters.policy_config import load_policy, policy_path
     from routercore.adapters.route_map_config import load_route_map
 
     parser = argparse.ArgumentParser()
@@ -76,7 +76,7 @@ def main() -> None:
         ensure_bucket(s3, bucket)
         upload_dataset(s3, bucket, args.dataset, ROOT / "training" / "golden_set" / "golden.jsonl")
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
-    policy, _ = load_policy(ROOT / "config" / "policy.yaml")
+    policy, _ = load_policy(policy_path(ROOT / "config", args.router))
     router = build_router(args.router, route_map, policy if args.policy else None)
     key = run_batch(s3, router, router_name=args.router, dataset_key=args.dataset,
                     bucket=os.environ.get("S3_BUCKET", "router-eval"))

@@ -15,7 +15,7 @@ from pathlib import Path
 from harness import evaluate
 from routers import LlmOnlyRouter, ModelRouter
 
-from routercore.adapters.policy_config import load_policy
+from routercore.adapters.policy_config import load_policy, policy_path
 from routercore.adapters.route_map_config import load_route_map
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -70,7 +70,7 @@ def main() -> None:
     args = parser.parse_args()
 
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
-    policy, threshold_set = load_policy(ROOT / "config" / "policy.yaml")
+    policy, threshold_set = load_policy(policy_path(ROOT / "config", args.router))
     rows = load_rows(args.dataset, args.limit)
     router = build_router(args.router, route_map, policy if args.policy else None)
 

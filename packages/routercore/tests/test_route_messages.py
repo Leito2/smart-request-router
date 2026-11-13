@@ -39,3 +39,14 @@ def test_load_policy_reads_the_versioned_config():
     policy, threshold_set = load_policy(REPO_ROOT / "config" / "policy.yaml")
     assert threshold_set and threshold_set != "v0-placeholder"  # chosen by training/choose_thresholds.py
     assert 0 < policy.tau <= 1 and 0 <= policy.margin < 1 and 0 <= policy.tau_urgent <= 1
+
+
+def test_each_model_family_has_its_own_threshold_file(tmp_path):
+    from routercore.adapters.policy_config import policy_path
+
+    (tmp_path / "policy.yaml").write_text("x")
+    assert policy_path(tmp_path, "laya") == tmp_path / "policy.yaml"
+    assert policy_path(tmp_path, "setfit") == tmp_path / "policy.yaml"      # no dedicated file yet
+    (tmp_path / "policy.setfit.yaml").write_text("x")
+    assert policy_path(tmp_path, "setfit") == tmp_path / "policy.setfit.yaml"
+    assert policy_path(tmp_path, "b1") == tmp_path / "policy.setfit.yaml"   # eval name of the same model

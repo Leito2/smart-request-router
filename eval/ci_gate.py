@@ -16,7 +16,7 @@ from routers import ModelRouter
 
 from judgekit.gate import Rule, load_rules
 from judgekit.gate import evaluate as check_rules
-from routercore.adapters.policy_config import load_policy
+from routercore.adapters.policy_config import load_policy, policy_path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "training"))
@@ -57,6 +57,10 @@ def build_model(name: str):
     if name == "rules":
         from baselines.rules import RulesModel
         return RulesModel(route_map)
+    if name == "setfit":
+        sys.path.insert(0, str(ROOT / "training"))
+        from baselines.setfit_model import SetFitRouter
+        return SetFitRouter.load(ROOT / "models" / "b1_setfit")
     from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration
     fine_tuned, calibration = ROOT / "models" / "laya_ft", ROOT / "models" / "calibration.json"
     return LayaModel.load(route_map.routes, checkpoint=str(fine_tuned) if fine_tuned.exists() else CHECKPOINT,
@@ -75,7 +79,7 @@ def main() -> None:
     golden = [json.loads(line) for line in
               (ROOT / "training/golden_set/golden.jsonl").read_text(encoding="utf-8").splitlines() if line]
     subset = select_ci_subset(golden, args.size)
-    policy, _ = load_policy(ROOT / "config" / "policy.yaml")   # judge the whole system, safety net included
+    policy, _ = load_policy(policy_path(ROOT / "config", args.model))   # whole system, safety net included
     predictions = ModelRouter(build_model(args.model), policy).predict(subset)
     if args.degrade:
         labels = sorted({r["route"] for r in golden})

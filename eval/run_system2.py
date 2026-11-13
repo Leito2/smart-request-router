@@ -17,7 +17,7 @@ from harness import Prediction, evaluate
 from run_eval import SETS, build_router, load_rows
 
 from judgekit.stats import paired_bootstrap
-from routercore.adapters.policy_config import load_policy
+from routercore.adapters.policy_config import load_policy, policy_path
 from routercore.adapters.route_map_config import load_route_map
 from routercore.application.contracts import InboundMessage
 from routercore.domain.policy import decide
@@ -87,7 +87,7 @@ def main() -> None:
     args = parser.parse_args()
 
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
-    policy, threshold_set = load_policy(ROOT / "config" / "policy.yaml")
+    policy, threshold_set = load_policy(policy_path(ROOT / "config", args.model))
     rows = load_rows(args.dataset, args.limit)
     router = build_router(args.model, route_map, policy)
     laya = router.predict(rows)
