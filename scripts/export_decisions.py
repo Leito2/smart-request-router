@@ -1,4 +1,4 @@
-"""Export decisions from the topics for eval/drift_monitor.py (stands in for the Postgres decision log export).
+"""Export decisions from the topics for eval/drift_monitor.py (stands in for the Postgres log export).
 
 Usage: python scripts/export_decisions.py out.jsonl
 Joins `routed` and `escalations` with `inbound-messages` (for the language) and writes one JSON line per
