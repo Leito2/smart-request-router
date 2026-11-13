@@ -1,0 +1,15 @@
+{
+  "policy": {
+    "tau": 0.775,
+    "margin": 0.0,
+    "tau_urgent": 0.0168,
+    "max_entropy": 0.6
+  },
+  "coverage": 0.0338,
+  "accuracy": 0.9231,
+  "target_met": true,
+  "target_accuracy": 0.9,
+  "min_urgent_recall": 0.98,
+  "rows": 1155,
+  "checkpoint": "C:\\Users\\Leito\\Documents\\AI Engineer proyects\\smart-request-router\\models\\laya_ft"
+}

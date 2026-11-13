@@ -37,5 +37,5 @@ def test_confident_message_is_routed_and_unsure_one_escalated():
 
 def test_load_policy_reads_the_versioned_config():
     policy, threshold_set = load_policy(REPO_ROOT / "config" / "policy.yaml")
-    assert threshold_set == "v0-placeholder"
-    assert policy == Policy()
+    assert threshold_set and threshold_set != "v0-placeholder"  # chosen by training/choose_thresholds.py
+    assert 0 < policy.tau <= 1 and 0 <= policy.margin < 1 and 0 <= policy.tau_urgent <= 1
