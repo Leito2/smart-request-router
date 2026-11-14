@@ -48,6 +48,9 @@ def main() -> None:
     parser.add_argument("--full", action="store_true", help="also train the encoder (needs > 4 GB VRAM)")
     parser.add_argument("--unfreeze-top", type=int, default=0,
                         help="train only the last N encoder layers + head (fits 4 GB with N~8)")
+    parser.add_argument("--init", help="resume from this checkpoint dir (a finished epoch)")
+    parser.add_argument("--encoder-lr", type=float, default=2.5e-5)
+    parser.add_argument("--head-lr", type=float, default=1e-4)
     parser.add_argument("--out", default="models/laya_ft", help="checkpoint dir, relative to the repo")
     parser.add_argument("--report", default="docs/results/laya_finetune.json")
     parser.add_argument("--device", default="auto")
@@ -77,11 +80,12 @@ def main() -> None:
         laya_train.load_checkpoint = load_partially_frozen
 
     train_encoder = args.full or args.unfreeze_top > 0
-    config = TrainConfig(epochs=args.epochs, micro_batch=args.micro_batch, grad_accum=args.grad_accum,
+    config = TrainConfig(epochs=args.epochs, encoder_lr=args.encoder_lr, head_lr=args.head_lr,
+                         micro_batch=args.micro_batch, grad_accum=args.grad_accum,
                          freeze_encoder=not train_encoder, shuffle_options=("choice",), max_len=args.max_len,
                          eval_data=str(data / "val.jsonl"))
     started = time.perf_counter()
-    summary = finetune(str(data / "train.jsonl"), CHECKPOINT, str(ROOT / args.out), config,
+    summary = finetune(str(data / "train.jsonl"), args.init or CHECKPOINT, str(ROOT / args.out), config,
                        device=args.device)
     summary["train_seconds"] = round(time.perf_counter() - started, 1)
     summary["unfreeze_top"] = args.unfreeze_top
