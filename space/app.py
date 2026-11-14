@@ -51,7 +51,8 @@ def build_app() -> gr.Blocks:
     route = make_router(*load())
     with gr.Blocks(title="Smart Request Router - System 1") as demo:
         gr.Markdown("# Smart Request Router - System 1\nA SetFit model with an escalation policy for bank "
-                    "support messages (English / Spanish). It answers when confident and escalates otherwise. "
+                    "support messages (English / Spanish). It answers when confident and "
+                    "escalates otherwise. "
                     "Code: https://github.com/Leito2/smart-request-router")
         text = gr.Textbox(label="Customer message", lines=2)
         verdict = gr.Markdown()
