@@ -300,7 +300,8 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 5. **Langfuse tracing** is implemented (optional) but was not run against Langfuse Cloud (needs keys).
 6. **P1/P3 real services** were not available; adapters follow their published contracts and are tested against mocks.
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
-8. **Not done from PLAN:** git tag / Hugging Face Hub checkpoint, dataset and Space; the surge GIF (`docs/images/` is empty);
+8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
+   Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub; the surge GIF (`docs/images/` is empty);
    a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, Langfuse datasets/annotation and
    QA-saved percentage from M7b; CI running the quality gate.
 9. **Streaming figures use the rules model** (`smoke.json`, `surge_demo.json`): they validate the plumbing and the

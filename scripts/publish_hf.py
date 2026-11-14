@@ -87,6 +87,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--user", required=True)
     parser.add_argument("--upload", action="store_true", help="create public repos and upload")
+    parser.add_argument("--space", action="store_true",
+                        help="also publish the Gradio Space (the Hub needs a PRO plan for it: HTTP 402 on free accounts)")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
         dataset, model, space = stage(args.user, Path(tmp))
@@ -99,7 +101,7 @@ def main() -> None:
         api = HfApi()
         for name, kind, folder in [("smart-request-router-dataset", "dataset", dataset),
                                    ("smart-request-router-setfit", "model", model),
-                                   ("smart-request-router", "space", space)]:
+                                   *([("smart-request-router", "space", space)] if args.space else [])]:
             repo = f"{args.user}/{name}"
             extra = {"space_sdk": "gradio"} if kind == "space" else {}
             api.create_repo(repo, repo_type=kind, private=False, exist_ok=True, **extra)
