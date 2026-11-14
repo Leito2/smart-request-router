@@ -1,0 +1,7 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+setfit>=1.1
+sentence-transformers>=3
+huggingface_hub
+pyyaml
+routercore @ git+https://github.com/Leito2/smart-request-router.git@main#subdirectory=packages/routercore

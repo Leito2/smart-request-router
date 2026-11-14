@@ -3,7 +3,7 @@
 Usage: python scripts/publish_hf.py --user WhiteUniversal            # stage only, prints what would go up
        python scripts/publish_hf.py --user WhiteUniversal --upload   # create PUBLIC repos and upload
 Upload needs `hf auth login` first.
-Repos: <user>/smart-request-router-dataset and <user>/smart-request-router-setfit.
+Repos: <user>/smart-request-router-dataset, <user>/smart-request-router-setfit and the Space <user>/smart-request-router.
 """
 # ruff: noqa: E501  (the Hub cards below are prose that the Hub wraps itself)
 import argparse
@@ -61,8 +61,8 @@ are rule-based from the intent, not human-annotated.
 """
 
 
-def stage(user: str, out: Path) -> tuple[Path, Path]:
-    dataset, model = out / "dataset", out / "setfit"
+def stage(user: str, out: Path) -> tuple[Path, Path, Path]:
+    dataset, model, space = out / "dataset", out / "setfit", out / "space"
     dataset.mkdir(parents=True), model.mkdir(parents=True)
     for source, name in [("training/data/dataset.jsonl", "dataset.jsonl"),
                          ("training/golden_set/golden.jsonl", "golden.jsonl"),
@@ -74,7 +74,13 @@ def stage(user: str, out: Path) -> tuple[Path, Path]:
     (dataset / "README.md").write_text(DATASET_FRONT + card + DATASET_NOTE, encoding="utf-8")
     shutil.copytree(ROOT / "models" / "b1_setfit", model, dirs_exist_ok=True)
     (model / "README.md").write_text(MODEL_CARD.replace("{user}", user), encoding="utf-8")
-    return dataset, model
+    shutil.copy(ROOT / "config" / "policy.setfit.yaml", model / "policy.yaml")   # the Space reads it from the model repo
+    shutil.copytree(ROOT / "space", space)
+    app = (space / "app.py").read_text(encoding="utf-8").replace("WhiteUniversal", user)
+    (space / "app.py").write_text(app, encoding="utf-8")
+    (space / "README.md").write_text((space / "README.md").read_text(encoding="utf-8").replace("WhiteUniversal", user),
+                                     encoding="utf-8")
+    return dataset, model, space
 
 
 def main() -> None:
@@ -83,8 +89,8 @@ def main() -> None:
     parser.add_argument("--upload", action="store_true", help="create public repos and upload")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
-        dataset, model = stage(args.user, Path(tmp))
-        for folder in (dataset, model):
+        dataset, model, space = stage(args.user, Path(tmp))
+        for folder in (dataset, model, space):
             size = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file()) / 1e6
             print(f"staged {folder.name}: {size:.1f} MB")
         if not args.upload:
@@ -92,12 +98,15 @@ def main() -> None:
         from huggingface_hub import HfApi
         api = HfApi()
         for name, kind, folder in [("smart-request-router-dataset", "dataset", dataset),
-                                   ("smart-request-router-setfit", "model", model)]:
+                                   ("smart-request-router-setfit", "model", model),
+                                   ("smart-request-router", "space", space)]:
             repo = f"{args.user}/{name}"
-            api.create_repo(repo, repo_type=kind, private=False, exist_ok=True)
+            extra = {"space_sdk": "gradio"} if kind == "space" else {}
+            api.create_repo(repo, repo_type=kind, private=False, exist_ok=True, **extra)
             api.upload_folder(folder_path=str(folder), repo_id=repo, repo_type=kind,
                               commit_message="Initial upload")
-            print(f"uploaded https://huggingface.co/{'datasets/' if kind == 'dataset' else ''}{repo}")
+            prefix = {"dataset": "datasets/", "space": "spaces/", "model": ""}[kind]
+            print(f"uploaded https://huggingface.co/{prefix}{repo}")
 
 
 if __name__ == "__main__":
