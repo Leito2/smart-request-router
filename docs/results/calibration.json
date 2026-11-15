@@ -1,23 +1,23 @@
 {
   "temperatures": {
     "intent": {
-      "default": 1.0563,
-      "en": 1.0611,
-      "es": 1.0216
+      "default": 4.8481,
+      "en": 4.7927,
+      "es": 5.1969
     },
     "urgency": {
-      "default": 0.9736,
-      "en": 0.9632,
-      "es": 1.0339
+      "default": 6.9718,
+      "en": 6.7452,
+      "es": 8.0
     }
   },
   "ece_before": {
-    "intent": 0.0396,
-    "urgency": 0.0235
+    "intent": 0.1541,
+    "urgency": 0.1086
   },
   "ece_after": {
-    "intent": 0.0288,
-    "urgency": 0.0186
+    "intent": 0.1614,
+    "urgency": 0.0609
   },
   "rows": 1155,
   "checkpoint": "models/laya_ft"

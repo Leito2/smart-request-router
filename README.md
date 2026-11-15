@@ -10,9 +10,11 @@
   (offline harness, test / golden sets); the streaming path (Redpanda → Quix → dispatcher) adds **p50 51 ms / p95 87 ms**.
 - Because only the rest escalates, an LLM is called for **~50–60 %** of messages instead of **100 %** (LLM-only router).
 - A volume surge on one route (×5) is detected in **13.9 s** (10 s windows).
-- **The thesis is only half proven.** The calibrated decision model the project was built around (Laya) did **not** beat
-  a SetFit baseline when fine-tuned on a 4 GB GPU, and a 1.7 B/4 B local LLM as System 2 did **not** significantly beat
-  System 1 on the escalated cases. Details, numbers and what would change them are in [Part IV](#part-iv--proof) and
+- **The thesis is only half proven.** The decision model the project was built around (Laya), fine-tuned on a 4 GB GPU
+  (last 8 layers + head, 1 epoch), roughly **ties** SetFit on the in-distribution test sample (S1 coverage 54 % vs 50 %,
+  urgent recall 0.978 vs 0.956) but **loses** on the golden and hard sets, on calibration (ECE 0.16 vs 0.03) and on
+  latency (360 ms vs 9 ms); and a 1.7 B/4 B local LLM as System 2 did **not** significantly beat System 1 on the
+  escalated cases. Details, numbers and what would change them are in [Part IV](#part-iv--proof) and
   [Part VI](#part-vi--reflection).
 
 **Status:** v1.0 candidate. Design in [`PLAN.md`](PLAN.md) (Spanish); the course behind it: *Decision Models — System One AI*.
@@ -30,16 +32,17 @@ confident, otherwise it escalates. Files are in [`docs/results/`](docs/results).
 | B0 | Keyword rules | test (3,080) | 0.591 | 0.543 | 1.00 | – | 0.325 | – | 0.06 ms |
 | B1 | SetFit (2 heads), no escalation | test (3,080) | 0.778 | 0.704 | 1.00 | – | 0.879 | – | 79 ms |
 | B1+π | SetFit + policy | test (600) | 0.765 | 0.689 | 0.50 | 0.920 | 0.956 | 0.026 | 9 ms |
-| B1+π | SetFit + policy | golden (500) | 0.744 | 0.725 | 0.41 | 0.857 | 1.000 | 0.042 | 11 ms |
+| B1+π | SetFit + policy | golden (497) | 0.749 | 0.730 | 0.41 | 0.867 | 1.000 | 0.034 | 18 ms† |
 | B1+π | SetFit + policy | hard (394) | 0.594 | 0.488 | 0.35 | 0.676 | 0.973 | 0.104 | 18 ms |
-| B3+π* | Laya, head fine-tuned (frozen encoder) + policy | test (600) | 0.497 | 0.411 | 0.12 | 0.916 | 1.000 | 0.034 | 364 ms |
-| B3+π* | same | golden (500) | 0.416 | 0.405 | 0.09 | 0.756 | 1.000 | 0.059 | 404 ms |
-| B2 | Laya zero-shot (uncalibrated) | golden (500) | 0.402 | 0.375 | 1.00 | – | 0.611 | 0.292 | 385 ms |
+| B3+π | Laya, last 8 layers + head fine-tuned (1 epoch) + policy | test (600) | 0.782 | 0.700 | 0.54 | 0.920 | 0.978 | 0.159 | 360 ms |
+| B3+π | same | golden (497) | 0.654 | 0.650 | 0.44 | 0.823 | 0.971 | 0.194 | 399 ms |
+| B3+π | same | hard (394) | 0.485 | 0.430 | 0.42 | 0.606 | 0.865 | 0.282 | 404 ms |
+| B2 | Laya zero-shot (uncalibrated) | golden (497) | 0.419 | 0.392 | 1.00 | – | 0.600 | 0.277 | 398 ms |
 | B4 | LLM only (qwen3:1.7b, local, no thinking) | test (300) | 0.483 | 0.401 | 1.00 | – | 0.286 | – | 718 ms |
 
-\* B3+π was evaluated with the placeholder thresholds (`v0-placeholder`, tau 0.80), before threshold selection. The
-thresholds later chosen for Laya give only 3.4 % coverage at 90 % accuracy on validation (Part III), so these rows
-overstate Laya's coverage.
+† Measured while the machine was busy; SetFit's p95 is 9–11 ms on an idle machine. The golden set was reviewed once by a
+frontier model (497 rows), so golden rows are not comparable with earlier versions of this table. B3+π uses the
+thresholds chosen on validation for that checkpoint (`v1-t0.675-m0.3-u0.0-e1.01`).
 
 Escalated cases only: System 2 vs System 1 on the hard set (100 cases, 66 escalated by SetFit's policy; paired
 bootstrap, 95 % CI). The last two rows are an earlier run with Laya's thresholds (80 cases, 76 escalated;
@@ -182,15 +185,26 @@ Twelve routes are deliberate: Laya degrades with more than ~20 options (zero-sho
 **Baselines.** B0 keyword rules; B1 SetFit with an intent head and an urgency head (16 shots/class).
 
 **Fine-tuning Laya on 4 GB.** `laya.train` has no LoRA and the 322 M encoder plus optimizer state does not fit in
-4 GB of VRAM, so the local run trains only the decision head (encoder frozen), 2 epochs over 20,574 items
-(10,287 rows × 2 questions), 2 h 38 on a GTX 1650. Validation accuracy (route+urgency items) 0.443 → 0.585, ECE 0.222 → 0.025.
+4 GB of VRAM. Two local runs, both over 20,574 items (10,287 rows × 2 questions) on a GTX 1650:
+
+1. *Head only* (encoder frozen), 2 epochs, 2 h 38: validation route accuracy **0.476**, urgency 0.695. It loses clearly to
+   SetFit (0.764 / 0.734) and its validated thresholds cover only 3.4 % of messages.
+2. *Last 8 of 22 encoder layers + head* (`--unfreeze-top 8`; the embeddings are ~60 % of the parameters and stay frozen,
+   which brings it to ~2.6 GB), **1 epoch (~3 h)**: validation route accuracy **0.755**, urgency **0.869** (raw, uncalibrated).
+   This is the checkpoint behind the B3 rows. A second epoch was started but cancelled (the GPU was thermally throttling
+   at 86 °C and the run was twice as slow), so the schedule is shorter than the 2 epochs planned. The result is a lower
+   bound on what this recipe gives.
+
 A full fine-tune on Kaggle/Colab is prepared in
 [`training/notebooks/laya_full_ft.ipynb`](training/notebooks/laya_full_ft.ipynb) but has **not** been run.
 A gotcha worth knowing: with `max_len=128` the 12-option question does not fit and `laya.train` silently skips every route
 item, so only urgency was being trained; the default is now 320.
 
 **Calibration.** Temperature scaling per question and per language, fitted on validation only
-([`training/calibrate.py`](training/calibrate.py)). On `laya_ft`: ECE route 0.040 → 0.029, urgency 0.024 → 0.019.
+([`training/calibrate.py`](training/calibrate.py)). On the 8-layer checkpoint the temperatures are large (route 4.8, urgency
+7.0; the fit hits its 8.0 cap for Spanish urgency) and **do not fix route calibration**: validation ECE route 0.154 → 0.161,
+urgency 0.109 → 0.061. Laya's probabilities stay poorly calibrated (ECE 0.16–0.19 on test/golden), so its thresholds are
+less trustworthy than SetFit's. (For the head-only run calibration had worked: route 0.040 → 0.029.)
 
 **Thresholds.** [`training/choose_thresholds.py`](training/choose_thresholds.py) picks `tau`, `margin`, `max_entropy` for the
 highest S1 coverage whose accepted messages reach 90 % accuracy on validation, and `tau_urgent` so ≥ 98 % of urgent
@@ -199,14 +213,17 @@ messages escalate. Thresholds belong to a model, so each has its own file (`conf
 
 | Model | Coverage @ 90 % acc (val) | tau / margin / tau_urgent / max_entropy |
 |---|---|---|
-| Laya (frozen encoder) | **3.4 %** | 0.775 / 0.0 / 0.017 / 0.6 |
+| Laya (head only, frozen encoder) | **3.4 %** | 0.775 / 0.0 / 0.017 / 0.6 |
+| Laya (last 8 layers, epoch 1) | **51.6 %** | 0.675 / 0.3 / 0.0 / 1.01 |
 | SetFit | **47.3 %** | 0.625 / 0.2 / 0.218 / 1.01 (entropy/OOD rule effectively off: normalized entropy never exceeds 1) |
 
-The urgent-recall target (≥ 98 %) is met on validation but not on every evaluation sample for SetFit: 0.956 on the
-600-row test sample, 0.973 on hard, 1.0 on golden.
+The urgent-recall target (≥ 98 %) is met on validation but not on every evaluation sample: SetFit gets 0.956 on the
+600-row test sample, 0.973 on hard, 1.0 on golden; Laya (8 layers) 0.978, 0.865 and 0.971. Laya's `tau_urgent` is 0.0
+because its urgency head outputs exact zeros for the urgent classes on 966 of 1,155 validation rows, so "any urgent mass"
+is the rule that reaches 98 % recall; that is correct but brittle.
 
-**ONNX.** The fp32 graph agrees 100 % with PyTorch (route and urgency); **int8 agrees only 75 %**, so fp32 is what would
-ship (Laya warns that int8 hurts calibration). fp32 p95 on CPU: 0.89 s at batch 1, ≈ 1.1 s per message at batch 8–16.
+**ONNX.** The fp32 graph agrees 100 % with PyTorch (route and urgency); **int8 agrees only 78 % (route) / 84 % (urgency)**, far below the 99.5 % gate, so fp32 is what would
+ship (Laya warns that int8 hurts calibration). Measured on the 8-layer fine-tuned checkpoint, 300 validation rows. fp32 p95 on CPU: 0.86 s at batch 1, ≈ 1.1 s per message at batch 8–16.
 
 **Improvement loop.** `training/feedback.py` merges human corrections into the training set; `training/promote.py` promotes a
 candidate that passes the gate to `production` in an MLflow registry and keeps the previous one as `previous`
@@ -286,10 +303,13 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 
 **What did not.**
 
-1. **Laya, with only its head trained, loses to SetFit** (macro-F1 0.41 vs 0.69 on test, 30–60× slower), so the planned
-   acceptance criterion *B3 ≥ B1* is **not met**. The cause is almost certainly the frozen encoder (4 GB VRAM); the full
-   fine-tune notebook is the next step and was not run. Until then the working System 1 is SetFit, behind the same port (PLAN risk R1).
-2. **int8 ONNX is not usable** (75 % agreement); fp32 only.
+1. **Laya does not beat SetFit overall**, so the planned acceptance criterion *B3 ≥ B1* is **not met**. With the head only it
+   was far behind (macro-F1 0.41 vs 0.69 on test). Training the last 8 layers closes the gap on the in-distribution test sample
+   (macro-F1 0.70 vs 0.69, coverage 54 % vs 50 %, urgent recall 0.978 vs 0.956) but on the golden set it is still behind
+   (accuracy 0.654 vs 0.749, macro-F1 0.650 vs 0.730), on the hard set urgent recall falls to 0.865 (SetFit 0.973), its ECE is
+   5–6× worse and it is 40× slower on a CPU/GPU-poor machine (360 ms vs 9 ms). The remaining levers are the second epoch and a
+   full fine-tune (notebook not run). Until then the working System 1 is SetFit, behind the same port (PLAN risk R1).
+2. **int8 ONNX is not usable** (78–84 % agreement vs a 99.5 % gate); fp32 only.
 3. **System 2 did not significantly beat System 1** with the small local models available (qwen3:1.7b; gemma3:4b below).
    The harness, the paired-bootstrap gate and the agent work; a stronger model behind the gateway alias `smart_router` is the experiment to run.
 4. **Golden-set review and judge validation (κ ≥ 0.6).** The golden set got one frontier-model review pass (Claude
@@ -307,7 +327,7 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 9. **Streaming figures use the rules model** (`smoke.json`, `surge_demo.json`): they validate the plumbing and the
    detector, not SetFit's or Laya's throughput. SetFit's own p95 is 9–18 ms offline.
 
-**Deviations from PLAN.** Frozen encoder instead of LoRA; Quix handles messages one by one rather than micro-batches of 16
+**Deviations from PLAN.** Last 8 encoder layers trained instead of LoRA (the head-only run is kept as the negative baseline); Quix handles messages one by one rather than micro-batches of 16
 (ADR-3, the model call is not the bottleneck with SetFit); the gate baseline is the local Laya checkpoint rather than a
 published one; MinIO replaced by a moto S3 server; the retrain step of the pipeline is a stub.
 
