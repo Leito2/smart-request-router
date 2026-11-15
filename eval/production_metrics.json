@@ -1,15 +1,15 @@
 {
   "model": "setfit",
-  "accuracy": 0.68,
-  "macro_f1": 0.6449114281775572,
-  "macro_f1_en": 0.6895474895474895,
-  "macro_f1_es": 0.5394990545852615,
-  "coverage": 0.35,
-  "selective_accuracy": 0.8285714285714286,
+  "accuracy": 0.73,
+  "macro_f1": 0.7041395918065908,
+  "macro_f1_en": 0.7656413031413032,
+  "macro_f1_es": 0.5891275391275391,
+  "coverage": 0.29,
+  "selective_accuracy": 0.896551724137931,
   "urgent_recall": 1.0,
-  "ece": 0.07397949278354644,
+  "ece": 0.04831228941679001,
   "llm_calls_per_1k": 0.0,
   "tokens_per_1k": 0.0,
-  "latency_p50_ms": 4.341043750173412,
-  "latency_p95_ms": 35.21407500011264
+  "latency_p50_ms": 3.9382062495860737,
+  "latency_p95_ms": 16.762493753049057
 }
