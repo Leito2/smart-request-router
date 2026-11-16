@@ -239,8 +239,10 @@ recall, ECE, LLM calls and tokens per 1k, and latency percentiles for any router
 **Quality gate.** [`eval/ci_gate.py`](eval/ci_gate.py) (default model: SetFit) runs a 100-case golden subset and fails when macro-F1 drops > 0.01, ECE rises
 > 0.02 or urgent recall < 0.98 ([`config/gates.yaml`](config/gates.yaml)). Verified both ways: it passes on the committed
 baseline and fails with `--degrade 0.3` (macro-F1 −0.22, ECE +0.17). The baseline in `eval/production_metrics.json` is
-SetFit's (macro-F1 0.645, coverage 0.35, urgent recall 1.0). GitHub CI does **not** run the gate: the weights are
-not in the repo, so the "a regressing PR fails CI" criterion is demonstrated locally only (see Part VI).
+SetFit's (macro-F1 0.704, coverage 0.29, urgent recall 1.0, ECE 0.048). GitHub CI runs it in the `quality-gate` job:
+it downloads the published SetFit model at a pinned revision (`MODEL_REVISION` in `.github/workflows/ci.yml`, versions in
+`.github/gate-requirements.txt`), must reproduce the baseline on Linux (it does: same macro-F1 and ECE as on Windows) and
+must fail when 30 % of predictions are flipped (macro-F1 −0.28, ECE +0.16). Republishing the model means bumping the revision.
 
 **Judge validation.** [`eval/judge_validation.py`](eval/judge_validation.py) builds cases, collects a reference review, runs the
 judge, and computes Cohen's κ (target ≥ 0.6). The reference is a frontier-model pass (Claude Opus 5.5, high effort; no human
@@ -330,7 +332,7 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
    Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub; the surge GIF (`docs/images/` is empty);
    a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, Langfuse datasets/annotation and
-   QA-saved percentage from M7b; CI running the quality gate.
+   QA-saved percentage from M7b.
 9. **Streaming figures use the rules model** (`smoke.json`, `surge_demo.json`): they validate the plumbing and the
    detector, not SetFit's or Laya's throughput. SetFit's own p95 is 9–18 ms offline.
 
