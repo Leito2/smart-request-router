@@ -29,6 +29,30 @@ SYSTEM = ("You audit a customer-support router for a fintech. Given a customer m
           'handle it). Reply JSON only: {"acceptable": 1 or 0, "reason": "<one sentence>"}.')
 
 
+STRICT = ("Be strict: accept only when the named team is the one primarily responsible for the customer's "
+          "main request. A team that is merely related, or could forward the case, is not acceptable. "
+          "If the message mixes topics, judge the topic the customer most needs solved. "
+          "When in doubt, answer 0. ")
+
+
+def system_prompt(rubric: int, routes: dict[str, str]) -> str:
+    """Rubric 1 names the team only; 2 also lists what each team covers (what the reviewer had);
+    3 adds a strictness instruction, because the judge at rubric 2 accepts too many wrong routings."""
+    if rubric == 1:
+        return SYSTEM
+    listing = "\n".join(f"- {name}: {description}" for name, description in routes.items())
+    covers = f"The teams and what each one covers:\n{listing}\nReply JSON only"
+    if rubric == 3:
+        covers = STRICT + covers
+    return SYSTEM.replace("Reply JSON only", covers)
+
+
+def seeded(name: str, seed: int) -> str:
+    """Seed 0 keeps the original file names; other seeds are held-out sets with their own files."""
+    stem, dot, ext = name.partition(".")
+    return name if seed == 0 else f"{stem}_seed{seed}{dot}{ext}"
+
+
 def build_cases(rows: list[dict], predictions: list[str], *, size: int, seed: int) -> list[dict]:
     """Half the cases carry a correct proposal and half a wrong one, so kappa has both classes to agree on."""
     rng = random.Random(seed)
@@ -62,17 +86,21 @@ def _read(path: Path) -> list[dict]:
     return read_jsonl(path)
 
 
-async def run_judge(cases: list[dict]) -> dict[str, int | None]:
+async def run_judge(cases: list[dict], system: str) -> dict[str, int | None]:
     from judgekit.clients import ChatClient
 
     async with ChatClient(os.environ.get("JUDGE_BASE_URL", "http://localhost:11434"),
                           model=os.environ.get("JUDGE_MODEL", "gemma3:4b"),
                           api_key=os.environ.get("JUDGE_API_KEY")) as client:
+        # one local GPU: letting all 100 requests queue at once makes the slowest exceed the client timeout
+        slots = asyncio.Semaphore(int(os.environ.get("JUDGE_CONCURRENCY", "4")))
+
         async def one(case: dict) -> tuple[str, int | None]:
             user = json.dumps({"message": case["text"], "routed_to": case["proposed_route"]},
                               ensure_ascii=False)
-            messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
-            done = await client.complete(messages, max_tokens=80)
+            messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+            async with slots:
+                done = await client.complete(messages, max_tokens=80)
             return case["id"], parse_verdict(done.text)
         return dict(await asyncio.gather(*(one(c) for c in cases)))
 
@@ -80,9 +108,13 @@ async def run_judge(cases: list[dict]) -> dict[str, int | None]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("step", choices=["build", "judge", "kappa"])
+    parser.add_argument("--rubric", type=int, choices=[1, 2, 3], default=2)
+    parser.add_argument("--seed", type=int, default=0, help="non-zero = a fresh held-out case set")
     args = parser.parse_args()
     DIRECTORY.mkdir(parents=True, exist_ok=True)
-    cases_path, judge_path = DIRECTORY / "cases.jsonl", DIRECTORY / "judge.json"
+    cases_path = DIRECTORY / seeded("cases.jsonl", args.seed)
+    judge_path = DIRECTORY / seeded("judge.json", args.seed)
+    reference_path = DIRECTORY / seeded("reference.jsonl", args.seed)
 
     if args.step == "build":
         sys.path.insert(0, str(ROOT / "eval"))
@@ -94,16 +126,18 @@ def main() -> None:
         rows = load_rows("golden", None)
         router = build_router("b1", load_route_map(ROOT / "config" / "route_map.yaml"), None)
         predictions = [p.route for p in ModelRouter.predict(router, rows)]
-        cases = build_cases(rows, predictions, size=100, seed=0)
+        cases = build_cases(rows, predictions, size=100, seed=args.seed)
         lines = "\n".join(json.dumps(c, ensure_ascii=False) for c in cases)
         cases_path.write_text(lines + "\n", encoding="utf-8")
         print(f"{len(cases)} cases -> {cases_path}")
     elif args.step == "judge":
-        labels = asyncio.run(run_judge(_read(cases_path)))
+        from routercore.adapters.route_map_config import load_route_map
+        routes = load_route_map(ROOT / "config" / "route_map.yaml").routes
+        labels = asyncio.run(run_judge(_read(cases_path), system_prompt(args.rubric, routes)))
         judge_path.write_text(json.dumps(labels, indent=2), encoding="utf-8")
         print(f"{sum(v is not None for v in labels.values())}/{len(labels)} parsed")
     else:
-        reference = {r["id"]: int(r["acceptable"]) for r in _read(DIRECTORY / "reference.jsonl")}
+        reference = {r["id"]: int(r["acceptable"]) for r in _read(reference_path)}
         report = agreement(json.loads(judge_path.read_text(encoding="utf-8")), reference)
         (ROOT / "docs" / "results" / "judge_kappa.json").write_text(json.dumps(report, indent=2) + "\n",
                                                                     encoding="utf-8")

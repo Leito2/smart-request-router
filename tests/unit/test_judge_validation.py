@@ -1,4 +1,4 @@
-from judge_validation import agreement, build_cases, parse_verdict
+from judge_validation import SYSTEM, agreement, build_cases, parse_verdict, seeded, system_prompt
 
 
 def test_parse_verdict_accepts_json_or_bare_digit_and_rejects_garbage():
@@ -29,3 +29,18 @@ def test_build_cases_mixes_correct_and_wrong_proposals_deterministically():
     cases = build_cases(rows, predictions, size=10, seed=0)
     assert len(cases) == 10 and cases == build_cases(rows, predictions, size=10, seed=0)
     assert {c["proposed_route"] for c in cases} == {"cards", "fees"}
+
+
+def test_rubrics_add_route_descriptions_then_strictness():
+    routes = {"cards": "lost or blocked cards", "fees": "charges and fees"}
+    assert system_prompt(1, routes) == SYSTEM
+    covered = system_prompt(2, routes)
+    assert "- cards: lost or blocked cards" in covered and "Be strict" not in covered
+    strict = system_prompt(3, routes)
+    assert "- fees: charges and fees" in strict and "When in doubt, answer 0" in strict
+    assert strict.endswith(SYSTEM.split("Reply JSON only")[1])      # the JSON answer format survives
+
+
+def test_seeded_keeps_seed_zero_names_and_suffixes_held_out_sets():
+    assert seeded("cases.jsonl", 0) == "cases.jsonl"
+    assert seeded("judge_kappa.json", 3) == "judge_kappa_seed3.json"

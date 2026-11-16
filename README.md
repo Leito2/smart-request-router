@@ -243,8 +243,11 @@ SetFit's (macro-F1 0.645, coverage 0.35, urgent recall 1.0). GitHub CI does **no
 not in the repo, so the "a regressing PR fails CI" criterion is demonstrated locally only (see Part VI).
 
 **Judge validation.** [`eval/judge_validation.py`](eval/judge_validation.py) builds cases, collects a reference review, runs the
-judge, and computes Cohen's κ (target ≥ 0.6). **Not completed:** the reference review needs a strong model/human pass
-([`docs/judge_validation/REVIEW.md`](docs/judge_validation/REVIEW.md)).
+judge, and computes Cohen's κ (target ≥ 0.6). The reference is a frontier-model pass (Claude Opus 5.5, high effort; no human
+review, [`docs/judge_validation/REVIEW.md`](docs/judge_validation/REVIEW.md)) over 100 cases. **Result: the local judge
+(gemma3:4b) fails the gate**: κ 0.10 naming only the team, 0.30 listing what each team covers, 0.25 with a "be strict"
+instruction (accuracy 0.72 / 0.67; errors go both ways, 18 false accepts and 15 false rejects at the strict rubric). So the
+judge is a **signal, never evidence**, as PLAN §5.3 says; reports in `docs/results/judge_kappa*.json`.
 
 **Drift.** PSI on prediction signals (route mix, language mix, confidence, routed/escalated split) against the training
 distribution, no labels needed. On the surge-demo traffic (payments ×5) the route mix drifts (PSI 3.94, threshold 0.25) and
@@ -316,9 +319,13 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
    Fable 5.2, `training/golden_set/reviews.jsonl`): 467 ok, 30 fixed, 3 dropped → **497 rows**. It is a single model
    pass, not a human review, and 12 of the fixes (sarcastic hard cases moved from `general` to a specific route) are
    debatable; revert them in `reviews.jsonl` if `general` is the intended label. The golden tables above were measured
-   on the 500 **pre-review** labels and are being re-run. The judge κ reference review is still not done.
+   on the 500 **pre-review** labels and are being re-run. The judge κ was measured against an Opus 5.5 reference (not a
+   human): 0.30 at best, below the 0.6 gate (see Judge validation). A larger judge behind the gateway is the next lever.
 5. **Langfuse tracing** is implemented (optional) but was not run against Langfuse Cloud (needs keys).
-6. **P1/P3 real services** were not available; adapters follow their published contracts and are tested against mocks.
+6. **P1/P3 real services:** the adapters are checked against the real P1 and P3 FastAPI apps (`create_app` with in-memory
+   stores, served by each repo's own interpreter) in [`tests/contract/`](tests/contract/test_real_p1_p3.py): decisions,
+   404, null explanation (found this way and fixed), SSE token/retract/error. It skips when the sibling repos are absent
+   (CI). Not run against live stores (Redis/Postgres/Kafka behind P1, Qdrant behind P3).
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
 8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
    Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub; the surge GIF (`docs/images/` is empty);

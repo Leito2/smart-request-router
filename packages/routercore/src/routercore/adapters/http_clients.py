@@ -63,6 +63,7 @@ class HttpPaymentDecisions:
                 return "no decision found for that payment"
             response.raise_for_status()
             body = response.json()
-            return f"{body['decision']}: {body.get('explanation', '')}"
+            explanation = body.get("explanation")      # null until the explainer has run (LEFT JOIN in P1)
+            return f"{body['decision']}: {explanation}" if explanation else str(body["decision"])
         except (httpx.HTTPError, KeyError, ValueError) as error:
             return f"unavailable ({type(error).__name__})"

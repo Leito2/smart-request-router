@@ -68,6 +68,13 @@ def test_payment_decision_uses_the_payment_id_and_the_explanation():
     assert seen == ["/decisions/pay_42"]
 
 
+def test_a_decision_whose_explanation_is_not_ready_yet_is_not_printed_as_none():
+    """The real P1 joins explanations with LEFT JOIN: right after a decision `explanation` is null."""
+    body = {"decision": "APPROVE", "label_is_fraud": None, "explanation_status": None, "explanation": None}
+    answer = payments_with(lambda r: httpx.Response(200, json=body)).decision_for("status of pay_7?")
+    assert answer == "APPROVE"
+
+
 def test_unknown_payment_is_reported_not_raised():
     result = payments_with(lambda r: httpx.Response(404)).decision_for("what about pay_9?")
     assert result == "no decision found for that payment"
