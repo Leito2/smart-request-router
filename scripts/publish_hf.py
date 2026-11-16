@@ -54,7 +54,7 @@ Test split (3,080 rows, no escalation): accuracy 0.778, macro-F1 0.704, urgent r
 ```python
 from huggingface_hub import snapshot_download
 path = snapshot_download("{user}/smart-request-router-setfit")
-# then, from the repo: SetFitRouter.load(path)  (training/baselines/setfit_model.py)
+# then, from the repo: SetFitRouter.load(path)  (routercore.adapters.setfit_model)
 ```
 Limits: English and Spanish only; 12 banking-support routes; Spanish training data is machine translated; urgency labels
 are rule-based from the intent, not human-annotated.

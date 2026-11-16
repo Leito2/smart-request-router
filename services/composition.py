@@ -4,7 +4,6 @@ MODEL=setfit (default: the shipping System 1, PLAN §11 R1 plan B; B1 SetFit wit
 | laya (calibrated frozen-encoder fine-tune, policy.yaml) | rules (B0, no weights; smoke/CI).
 """
 import os
-import sys
 from pathlib import Path
 
 from routercore.adapters.policy_config import load_policy, policy_path
@@ -19,12 +18,10 @@ def build_route_messages(model_name: str | None = None) -> RouteMessages:
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
     policy, threshold_set = load_policy(policy_path(ROOT / "config", model_name))
     if model_name == "rules":
-        sys.path.insert(0, str(ROOT / "training"))
-        from baselines.rules import RulesModel
+        from routercore.adapters.rules_model import RulesModel
         model = RulesModel(route_map)
     elif model_name == "setfit":
-        sys.path.insert(0, str(ROOT / "training"))
-        from baselines.setfit_model import SetFitRouter
+        from routercore.adapters.setfit_model import SetFitRouter
         model = SetFitRouter.load(ROOT / "models" / "b1_setfit")
     else:
         from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration

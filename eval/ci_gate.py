@@ -55,11 +55,10 @@ def build_model(name: str):
 
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
     if name == "rules":
-        from baselines.rules import RulesModel
+        from routercore.adapters.rules_model import RulesModel
         return RulesModel(route_map)
     if name == "setfit":
-        sys.path.insert(0, str(ROOT / "training"))
-        from baselines.setfit_model import SetFitRouter
+        from routercore.adapters.setfit_model import SetFitRouter
         return SetFitRouter.load(ROOT / "models" / "b1_setfit")
     from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration
     fine_tuned, calibration = ROOT / "models" / "laya_ft", ROOT / "models" / "calibration.json"

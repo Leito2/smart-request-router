@@ -102,7 +102,7 @@ def collect_raw(checkpoint: str, device: str, model_name: str = "laya") -> list[
         encoding="utf-8").splitlines() if line]
     rows = [r for r in rows if r["split"] == "val"]
     if model_name == "setfit":
-        from baselines.setfit_model import SetFitRouter
+        from routercore.adapters.setfit_model import SetFitRouter
         model = SetFitRouter.load(ROOT / "models" / "b1_setfit")
     else:
         from routercore.adapters.laya_model import LayaModel

@@ -11,14 +11,10 @@ import psycopg
 import redis
 from confluent_kafka import Consumer
 
+from routercore.adapters.http_clients import HttpKnowledgeBase, HttpPaymentDecisions
 from routercore.application.contracts import Routed
 from routercore.application.dispatch import Dispatch
-from services.dispatcher.adapters import (
-    HttpKnowledgeBase,
-    HttpPaymentDecisions,
-    PostgresDecisionLog,
-    RedisTeamQueues,
-)
+from services.dispatcher.adapters import PostgresDecisionLog, RedisTeamQueues
 
 log = logging.getLogger("dispatcher")
 

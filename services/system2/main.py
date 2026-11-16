@@ -15,10 +15,10 @@ import redis
 from confluent_kafka import Consumer, Producer
 from prometheus_client import Counter, Histogram, start_http_server
 
+from routercore.adapters.http_clients import HttpKnowledgeBase, HttpPaymentDecisions
 from routercore.adapters.route_map_config import load_route_map
 from routercore.application.contracts import Escalation, Routed
 from services.composition import ROOT
-from services.dispatcher.adapters import HttpKnowledgeBase, HttpPaymentDecisions
 from services.envfile import load_env
 from services.system2.adapters import GatewayLlm, LiveTools, RedisHistory
 from services.system2.graph import FALLBACK_ROUTE, build_agent

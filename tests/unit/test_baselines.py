@@ -1,5 +1,4 @@
-from baselines.rules import RulesModel
-
+from routercore.adapters.rules_model import RulesModel
 from routercore.application.contracts import InboundMessage
 from routercore.domain.routes import RouteMap
 
@@ -48,7 +47,7 @@ class FakeHead:
 
 
 def test_setfit_router_names_each_probability_column_and_keeps_the_class_order():
-    from baselines.setfit_model import SetFitRouter
+    from routercore.adapters.setfit_model import SetFitRouter
 
     router = SetFitRouter(
         intent_head=FakeHead([[0.1, 0.7, 0.2], [0.6, 0.3, 0.1]]),

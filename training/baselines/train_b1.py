@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "training"))
 
-from baselines.setfit_model import SetFitRouter  # noqa: E402
+from routercore.adapters.setfit_model import SetFitRouter  # noqa: E402
 
 
 def main() -> None:

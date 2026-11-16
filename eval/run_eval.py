@@ -9,7 +9,6 @@ import argparse
 import json
 import os
 import random
-import sys
 from pathlib import Path
 
 from harness import evaluate
@@ -19,7 +18,6 @@ from routercore.adapters.policy_config import load_policy, policy_path
 from routercore.adapters.route_map_config import load_route_map
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "training"))     # baselines/ lives next to the training scripts
 NO_THINKING = '{"reasoning_effort": "none"}'      # qwen3 on Ollama otherwise spends the budget thinking
 SETS = {"test": ROOT / "training/data/dataset.jsonl", "golden": ROOT / "training/golden_set/golden.jsonl",
         "hard": ROOT / "training/golden_set/hard_cases.jsonl"}
@@ -36,10 +34,10 @@ def load_rows(name: str, limit: int | None) -> list[dict]:
 
 def build_router(name: str, route_map, policy):
     if name == "b0":
-        from baselines.rules import RulesModel
+        from routercore.adapters.rules_model import RulesModel
         return ModelRouter(RulesModel(route_map), policy)
     if name == "b1":
-        from baselines.setfit_model import SetFitRouter
+        from routercore.adapters.setfit_model import SetFitRouter
         return ModelRouter(SetFitRouter.load(ROOT / "models" / "b1_setfit"), policy)
     if name in ("b2", "b3"):
         from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration

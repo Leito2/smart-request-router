@@ -3,14 +3,14 @@ import json
 import httpx
 from fastapi.testclient import TestClient
 
-from routercore.application.contracts import Routed
-from services.dispatcher.adapters import (
+from routercore.adapters.http_clients import (
     HttpKnowledgeBase,
     HttpPaymentDecisions,
-    RedisTeamQueues,
     assemble_answer,
     parse_sse,
 )
+from routercore.application.contracts import Routed
+from services.dispatcher.adapters import RedisTeamQueues
 from services.mocks.app import create_mock_app
 
 

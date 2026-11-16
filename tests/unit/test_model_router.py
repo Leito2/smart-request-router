@@ -1,6 +1,6 @@
-from baselines.rules import RulesModel
 from routers import ModelRouter
 
+from routercore.adapters.rules_model import RulesModel
 from routercore.domain.policy import Policy
 from routercore.domain.routes import RouteMap
 
