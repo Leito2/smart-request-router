@@ -20,7 +20,13 @@ from routercore.adapters.route_map_config import load_route_map
 from routercore.application.contracts import Escalation, Routed
 from services.composition import ROOT
 from services.envfile import load_env
-from services.system2.adapters import GatewayLlm, LiveTools, RedisHistory
+from services.system2.adapters import (
+    GATEWAY_EXTRA_BODY,
+    GatewayLlm,
+    LiveTools,
+    RedisHistory,
+    extra_body_from_env,
+)
 from services.system2.graph import FALLBACK_ROUTE, build_agent
 from services.system2.tracing import from_env, trace_run
 
@@ -46,7 +52,8 @@ def main() -> None:
     start_http_server(int(os.environ.get("METRICS_PORT", "8003")))
     routes = load_route_map(ROOT / "config" / "route_map.yaml").routes
     llm = GatewayLlm(os.environ.get("GATEWAY_URL", "http://localhost:8080"),
-                     model=os.environ.get("LLM_MODEL", "smart_router"), api_key=os.environ.get("GATEWAY_KEY"))
+                     model=os.environ.get("LLM_MODEL", "smart_router"), api_key=os.environ.get("GATEWAY_KEY"),
+                     extra_body=extra_body_from_env(GATEWAY_EXTRA_BODY))
     tools = LiveTools(RedisHistory(redis.Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))),
                       HttpPaymentDecisions(os.environ.get("P1_URL", "http://localhost:8010")),
                       HttpKnowledgeBase(os.environ.get("P3_URL", "http://localhost:8010")))

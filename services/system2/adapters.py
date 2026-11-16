@@ -1,17 +1,30 @@
 """System 2 adapters: LLM through the gateway, and the agent's tools over the existing ports."""
+import json
+import os
+
 import httpx
 
 from routercore.application.ports import KnowledgeBase, PaymentDecisions
 
 NO_THINKING = {"reasoning_effort": "none"}      # qwen3 on Ollama otherwise spends the budget thinking
+# the gateway validates reasoning_effort (low|medium|high), so talking to it sends nothing extra by default
+GATEWAY_EXTRA_BODY: dict = {}
+
+
+def extra_body_from_env(default: dict) -> dict:
+    """`LLM_EXTRA_BODY` (a JSON object merged into every request) overrides the default for the endpoint."""
+    raw = os.environ.get("LLM_EXTRA_BODY")
+    return json.loads(raw) if raw else default
 
 
 class GatewayLlm:
     """OpenAI-compatible chat call (llm-gateway alias `smart_router`, or Ollama directly) -> text."""
 
     def __init__(self, base_url: str, *, model: str = "smart_router", api_key: str | None = None,
-                 client: httpx.Client | None = None, timeout_s: float = 20, max_tokens: int = 400):
+                 client: httpx.Client | None = None, timeout_s: float = 20, max_tokens: int = 400,
+                 extra_body: dict | None = None):
         self._url, self._model, self._max_tokens = base_url.rstrip("/"), model, max_tokens
+        self._extra = NO_THINKING if extra_body is None else extra_body
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = client or httpx.Client(timeout=timeout_s)
         self.tokens = 0
@@ -19,7 +32,7 @@ class GatewayLlm:
     def __call__(self, system: str, user: str) -> str:
         response = self._client.post(
             f"{self._url}/v1/chat/completions", headers=self._headers,
-            json={"model": self._model, "temperature": 0, "max_tokens": self._max_tokens, **NO_THINKING,
+            json={"model": self._model, "temperature": 0, "max_tokens": self._max_tokens, **self._extra,
                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
         response.raise_for_status()
         body = response.json()

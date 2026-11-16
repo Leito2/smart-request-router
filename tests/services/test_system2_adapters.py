@@ -1,6 +1,6 @@
 import httpx
 
-from services.system2.adapters import GatewayLlm, LiveTools
+from services.system2.adapters import GatewayLlm, LiveTools, extra_body_from_env
 
 
 def test_gateway_llm_sends_alias_and_returns_text_and_counts_tokens():
@@ -34,3 +34,21 @@ def test_live_tools_delegate_to_ports():
     tools = LiveTools(History(), Payments(), Kb())
     assert (tools.get_customer_history("c1"), tools.lookup_payment_decision("x"), tools.search_kb("y")) == (
         ["c1"], "ALLOW", "kb")
+
+
+def test_extra_body_defaults_to_no_thinking_for_ollama_and_is_overridable_for_the_gateway(monkeypatch):
+    sent = []
+
+    def handler(request):
+        import json
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    GatewayLlm("http://ollama", client=client)("s", "u")
+    GatewayLlm("http://gw", client=client, extra_body={})("s", "u")
+    assert sent[0]["reasoning_effort"] == "none" and "reasoning_effort" not in sent[1]
+    monkeypatch.setenv("LLM_EXTRA_BODY", '{"reasoning_effort": "low"}')
+    assert extra_body_from_env({}) == {"reasoning_effort": "low"}
+    monkeypatch.delenv("LLM_EXTRA_BODY")
+    assert extra_body_from_env({"x": 1}) == {"x": 1}

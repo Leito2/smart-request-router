@@ -1,8 +1,10 @@
 """B5 = System 1 + System 2 (PLAN §4.3 / §3.6 gate): does the agent beat Laya on the escalated cases?
 
-Usage: python eval/run_system2.py --model b1|laya --set golden|hard|test [--limit N] [--no-tools]
+Usage: python eval/run_system2.py --model b1|laya --set golden|hard|test [--limit N] [--no-tools] [--tag NAME]
 LLM: LLM_BASE_URL / LLM_MODEL / LLM_API_KEY (default local Ollama qwen3:1.7b; the gateway alias is
-`smart_router`). Tools are mocks here; the real P1/P3 adapters are used in the demos (M8).
+`smart_router`; against the gateway set LLM_EXTRA_BODY='{}' or '{"reasoning_effort": "low"}', and LLM_PACED=1
+to wait out 429/503 quota responses instead of falling back).
+Tools are mocks here; the real P1/P3 adapters are used in the demos (M8).
 Writes docs/results/b5-<set>.json including the paired-bootstrap interval of (System 2 - Laya) accuracy.
 """
 import argparse
@@ -64,6 +66,33 @@ def score_escalated(rows: list[dict], laya_routes: dict[int, str], s2_routes: di
             "significant": boot.significant}
 
 
+class QuotaPacedLlm:
+    """Eval-time wrapper: the gateway enforces the free tier's outbound quotas, so a 429/503 means "wait",
+    not "fail". Waits for Retry-After (else 10 s) and retries; other errors propagate to the agent."""
+
+    def __init__(self, llm, *, retries: int = 90, default_wait_s: float = 10):
+        self._llm, self._retries, self._wait = llm, retries, default_wait_s
+        self.waited_s = 0.0
+
+    @property
+    def tokens(self) -> int:
+        return self._llm.tokens
+
+    def __call__(self, system: str, user: str) -> str:
+        import httpx
+
+        for attempt in range(self._retries + 1):
+            try:
+                return self._llm(system, user)
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code not in (429, 503) or attempt == self._retries:
+                    raise
+                wait = float(error.response.headers.get("retry-after", self._wait))
+                self.waited_s += wait
+                time.sleep(wait)
+        raise AssertionError("unreachable")
+
+
 class MockTools:
     def get_customer_history(self, customer_id: str) -> list[str]:
         return []
@@ -76,7 +105,7 @@ class MockTools:
 
 
 def main() -> None:
-    from services.system2.adapters import GatewayLlm
+    from services.system2.adapters import NO_THINKING, GatewayLlm, extra_body_from_env
     from services.system2.graph import build_agent
 
     parser = argparse.ArgumentParser()
@@ -84,6 +113,7 @@ def main() -> None:
     parser.add_argument("--set", dest="dataset", choices=SETS, default="golden")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--no-tools", action="store_true", help="single-call baseline: no tool steps")
+    parser.add_argument("--tag", default="", help="suffix of the result file, e.g. the LLM used")
     args = parser.parse_args()
 
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
@@ -104,8 +134,10 @@ def main() -> None:
             escalated[i] = (a, reason)
 
     llm = GatewayLlm(os.environ.get("LLM_BASE_URL", "http://localhost:11434"),
-                     model=os.environ.get("LLM_MODEL", "qwen3:1.7b"), api_key=os.environ.get("LLM_API_KEY"))
-    agent = build_agent(llm, MockTools(), route_map.routes, max_steps=0 if args.no_tools else 6)
+                     model=os.environ.get("LLM_MODEL", "qwen3:1.7b"), api_key=os.environ.get("LLM_API_KEY"),
+                     extra_body=extra_body_from_env(NO_THINKING))
+    paced = QuotaPacedLlm(llm) if os.environ.get("LLM_PACED") else llm
+    agent = build_agent(paced, MockTools(), route_map.routes, max_steps=0 if args.no_tools else 6)
 
     def resolve(i: int) -> tuple[int, str, str, float]:
         a, reason = escalated[i]
@@ -126,13 +158,15 @@ def main() -> None:
     latency_p50 = sorted(ms for *_, ms in resolved)[len(resolved) // 2] if resolved else 0
     result = {"model": args.model, "set": args.dataset, "threshold_set": threshold_set, "rows": len(rows),
               "no_tools": args.no_tools, "escalated": len(escalated),
+              "llm": os.environ.get("LLM_MODEL", "qwen3:1.7b"),
+              "quota_wait_s": round(getattr(paced, "waited_s", 0.0), 1),
               "system2_latency_ms_p50": latency_p50,
               "fallback_rate": sum(r == "triage" for _, r, *_ in resolved) / max(len(resolved), 1),
               "escalated_only": score_escalated(rows, {i: laya[i].route for i in escalated},
                                                 {i: r for i, (r, *_) in s2.items()}) if resolved else None,
               "end_to_end": {k: round(v, 4) for k, v in evaluate(rows, combined).items()},
               "system1_only": {k: round(v, 4) for k, v in evaluate(rows, laya).items()}}
-    suffix = "-notools" if args.no_tools else ""
+    suffix = ("-notools" if args.no_tools else "") + (f"-{args.tag}" if args.tag else "")
     out = ROOT / "docs" / "results" / f"b5-{args.model}-{args.dataset}{suffix}.json"
     out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
