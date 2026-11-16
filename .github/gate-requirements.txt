@@ -1,0 +1,8 @@
+# What the quality-gate job installs on top of the locked base: the exact versions the SetFit model (and the
+# baseline in eval/production_metrics.json) were produced with. torch comes from the CPU index (see ci.yml).
+setfit==1.2.0
+sentence-transformers==6.2.0
+transformers==5.19.0
+scikit-learn==1.9.1
+numpy==2.5.3
+huggingface-hub==1.33.0

@@ -21,3 +21,37 @@ jobs:
         run: uv run lint-imports
       - name: Test
         run: uv run pytest -q
+
+  # PLAN §5.4: a PR that makes System 1 worse than the `production` baseline fails here. The SetFit weights are
+  # not in git, so the job pulls the published model at a pinned revision; bump MODEL_REVISION when it is republished.
+  quality-gate:
+    runs-on: ubuntu-latest
+    env:
+      MODEL_REPO: WhiteUniversal/smart-request-router-setfit
+      MODEL_REVISION: ef5519be12b4e1f1c36b39c0f634e9601e7f988d
+      PYTHONPATH: .:eval:training
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          uv sync --all-packages --dev --locked
+          uv pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -r .github/gate-requirements.txt
+      - name: Cache model
+        uses: actions/cache@v4
+        with:
+          path: models/b1_setfit
+          key: setfit-${{ env.MODEL_REVISION }}
+      - name: Download SetFit model
+        run: >
+          uv run --no-sync python -c "from huggingface_hub import snapshot_download;
+          snapshot_download('$MODEL_REPO', revision='$MODEL_REVISION', local_dir='models/b1_setfit',
+          allow_patterns=['intent/*', 'urgency/*', 'labels.json'])"
+      - name: Quality gate (must pass on the committed baseline)
+        run: uv run --no-sync python eval/ci_gate.py --model setfit
+      - name: Quality gate catches a regression (must fail with 30% of predictions flipped)
+        run: "! uv run --no-sync python eval/ci_gate.py --model setfit --degrade 0.3"
