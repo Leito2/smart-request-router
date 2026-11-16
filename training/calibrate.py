@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "eval"))
 
 from judgekit.probabilistic import expected_calibration_error, fit_temperature  # noqa: E402
+from routercore.adapters.jsonl import read_jsonl  # noqa: E402
+from routercore.adapters.model_factory import build_model  # noqa: E402
 from routercore.domain.calibration import apply_temperature  # noqa: E402
 
 QUESTIONS = ("intent", "urgency")
@@ -67,7 +69,7 @@ def collect(model, rows: list[dict]) -> list[dict]:
 
 
 def main() -> None:
-    from routercore.adapters.laya_model import CHECKPOINT, LayaModel
+    from routercore.adapters.laya_model import CHECKPOINT
     from routercore.adapters.route_map_config import load_route_map
 
     parser = argparse.ArgumentParser()
@@ -77,13 +79,12 @@ def main() -> None:
     args = parser.parse_args()
 
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
-    rows = [json.loads(line) for line in (ROOT / "training/data/dataset.jsonl").read_text(
-        encoding="utf-8").splitlines() if line]
+    rows = read_jsonl(ROOT / "training/data/dataset.jsonl")
     rows = [r for r in rows if r["split"] == "val"]
     if args.limit:
         rows = random.Random(0).sample(rows, min(args.limit, len(rows)))
-    model = LayaModel.load(route_map.routes, checkpoint=args.checkpoint, device=args.device,
-                           model_version="laya-calibrating")
+    model = build_model("laya", route_map, ROOT / "models", device=args.device, checkpoint=args.checkpoint,
+                        calibrated=False, model_version="laya-calibrating")
     report = fit_calibration(collect(model, rows))
     report["checkpoint"] = args.checkpoint
     (ROOT / "models").mkdir(exist_ok=True)

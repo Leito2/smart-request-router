@@ -16,6 +16,8 @@ from routers import ModelRouter
 
 from judgekit.gate import Rule, load_rules
 from judgekit.gate import evaluate as check_rules
+from routercore.adapters.jsonl import read_jsonl
+from routercore.adapters.model_factory import build_model
 from routercore.adapters.policy_config import load_policy, policy_path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,21 +52,11 @@ def gate_failures(rules: list[Rule], metrics: dict[str, float]) -> list[str]:
     return check_rules(rules, metrics)
 
 
-def build_model(name: str):
+def gate_model(name: str):
     from routercore.adapters.route_map_config import load_route_map
 
     route_map = load_route_map(ROOT / "config" / "route_map.yaml")
-    if name == "rules":
-        from routercore.adapters.rules_model import RulesModel
-        return RulesModel(route_map)
-    if name == "setfit":
-        from routercore.adapters.setfit_model import SetFitRouter
-        return SetFitRouter.load(ROOT / "models" / "b1_setfit")
-    from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration
-    fine_tuned, calibration = ROOT / "models" / "laya_ft", ROOT / "models" / "calibration.json"
-    return LayaModel.load(route_map.routes, checkpoint=str(fine_tuned) if fine_tuned.exists() else CHECKPOINT,
-                          model_version="laya-gate", supported_langs={"en", "es"},
-                          calibration=load_calibration(calibration) if calibration.exists() else None)
+    return build_model(name, route_map, ROOT / "models", model_version="laya-gate")
 
 
 def main() -> None:
@@ -75,11 +67,10 @@ def main() -> None:
     parser.add_argument("--degrade", type=float, default=0.0, help="demo: flip this share of predictions")
     args = parser.parse_args()
 
-    golden = [json.loads(line) for line in
-              (ROOT / "training/golden_set/golden.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    golden = read_jsonl(ROOT / "training/golden_set/golden.jsonl")
     subset = select_ci_subset(golden, args.size)
     policy, _ = load_policy(policy_path(ROOT / "config", args.model))   # whole system, safety net included
-    predictions = ModelRouter(build_model(args.model), policy).predict(subset)
+    predictions = ModelRouter(gate_model(args.model), policy).predict(subset)
     if args.degrade:
         labels = sorted({r["route"] for r in golden})
         flipped = degrade_routes([p.route for p in predictions], labels, share=args.degrade, seed=0)

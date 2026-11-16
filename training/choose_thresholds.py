@@ -17,6 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "training"))
 
+from routercore.adapters.jsonl import read_jsonl  # noqa: E402
+from routercore.adapters.model_factory import build_model  # noqa: E402
+from routercore.adapters.route_map_config import load_route_map  # noqa: E402
 from routercore.domain.calibration import apply_temperature  # noqa: E402
 from routercore.domain.policy import Policy, decide  # noqa: E402
 
@@ -98,17 +101,11 @@ def write_policy(result: dict, path: Path, model: str = "laya") -> None:
 def collect_raw(checkpoint: str, device: str, model_name: str = "laya") -> list[dict]:
     from calibrate import collect
 
-    rows = [json.loads(line) for line in (ROOT / "training/data/dataset.jsonl").read_text(
-        encoding="utf-8").splitlines() if line]
+    rows = read_jsonl(ROOT / "training/data/dataset.jsonl")
     rows = [r for r in rows if r["split"] == "val"]
-    if model_name == "setfit":
-        from routercore.adapters.setfit_model import SetFitRouter
-        model = SetFitRouter.load(ROOT / "models" / "b1_setfit")
-    else:
-        from routercore.adapters.laya_model import LayaModel
-        from routercore.adapters.route_map_config import load_route_map
-        model = LayaModel.load(load_route_map(ROOT / "config" / "route_map.yaml").routes,
-                               checkpoint=checkpoint, device=device, model_version="laya-thresholds")
+    route_map = load_route_map(ROOT / "config" / "route_map.yaml")
+    model = build_model(model_name, route_map, ROOT / "models", device=device, checkpoint=checkpoint,
+                        calibrated=False, model_version="laya-thresholds")
     return [{"lang": rec["lang"], "route_p": rec["intent"][0], "route": rec["intent"][1],
              "urgency_p": rec["urgency"][0], "urgency": rec["urgency"][1]} for rec in collect(model, rows)]
 

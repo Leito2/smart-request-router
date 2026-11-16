@@ -9,13 +9,15 @@ import time
 import uuid
 from pathlib import Path
 
+from routercore.adapters.jsonl import read_jsonl
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 SETS = {"test": ROOT / "training/data/dataset.jsonl", "hard": ROOT / "training/golden_set/hard_cases.jsonl"}
 CHANNELS = ("chat", "email", "app")
 
 
 def load_rows(name: str) -> list[dict]:
-    rows = [json.loads(line) for line in SETS[name].read_text(encoding="utf-8").splitlines() if line]
+    rows = read_jsonl(SETS[name])
     return [r for r in rows if r.get("split", "test") == "test"]
 
 

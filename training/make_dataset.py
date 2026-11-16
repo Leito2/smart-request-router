@@ -13,6 +13,7 @@ from data_prep import build_dataset, general_records, select_golden
 from general_train import general_examples
 from hard_cases import hand_written, hard_records, multi_intent
 
+from routercore.adapters.jsonl import read_jsonl
 from routercore.adapters.route_map_config import load_route_map
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,7 +23,7 @@ GOLDEN_SIZE, GOLDEN_HARD_SHARE, MULTI_INTENT_CASES = 500, 0.32, 250
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return read_jsonl(path)
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> dict:

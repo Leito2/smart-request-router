@@ -11,6 +11,8 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
+from routercore.adapters.jsonl import read_jsonl
+
 DATA = Path(__file__).parent / "data"
 OLLAMA = "http://localhost:11434/api/chat"
 SYSTEM = (
@@ -46,7 +48,7 @@ def sample(rows: list[dict], per_intent: int, seed: int) -> list[dict]:
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    return read_jsonl(path)
 
 
 def translate(text: str, model: str, tries: int = 3) -> str | None:

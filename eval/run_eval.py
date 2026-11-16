@@ -14,6 +14,8 @@ from pathlib import Path
 from harness import evaluate
 from routers import LlmOnlyRouter, ModelRouter
 
+from routercore.adapters.jsonl import read_jsonl
+from routercore.adapters.model_factory import build_model
 from routercore.adapters.policy_config import load_policy, policy_path
 from routercore.adapters.route_map_config import load_route_map
 
@@ -24,7 +26,7 @@ SETS = {"test": ROOT / "training/data/dataset.jsonl", "golden": ROOT / "training
 
 
 def load_rows(name: str, limit: int | None) -> list[dict]:
-    rows = [json.loads(line) for line in SETS[name].read_text(encoding="utf-8").splitlines() if line]
+    rows = read_jsonl(SETS[name])
     if name == "test":
         rows = [r for r in rows if r["split"] == "test"]
     if not limit:
@@ -32,22 +34,13 @@ def load_rows(name: str, limit: int | None) -> list[dict]:
     return random.Random(0).sample(rows, min(limit, len(rows)))    # fixed seed: same subset
 
 
+MODEL_OF = {"b0": "rules", "b1": "setfit", "b2": "laya-base", "b3": "laya"}     # eval names → factory names
+
+
 def build_router(name: str, route_map, policy):
-    if name == "b0":
-        from routercore.adapters.rules_model import RulesModel
-        return ModelRouter(RulesModel(route_map), policy)
-    if name == "b1":
-        from routercore.adapters.setfit_model import SetFitRouter
-        return ModelRouter(SetFitRouter.load(ROOT / "models" / "b1_setfit"), policy)
-    if name in ("b2", "b3"):
-        from routercore.adapters.laya_model import CHECKPOINT, LayaModel, load_calibration
-        calibration_path = ROOT / "models" / "calibration.json"
-        checkpoint = str(ROOT / "models" / "laya_ft") if name == "b3" else CHECKPOINT
-        use_calibration = name == "b3" and calibration_path.exists()
-        model = LayaModel.load(
-            route_map.routes, checkpoint=checkpoint, model_version=f"laya-{name}",
-            calibration=load_calibration(calibration_path) if use_calibration else None,
-            supported_langs={"en", "es"}, device=os.environ.get("LAYA_DEVICE", "cpu"))
+    if name in MODEL_OF:
+        model = build_model(MODEL_OF[name], route_map, ROOT / "models", model_version=f"laya-{name}",
+                            device=os.environ.get("LAYA_DEVICE", "cpu"))
         return ModelRouter(model, policy)
     if name == "b4":
         base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434")

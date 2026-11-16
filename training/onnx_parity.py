@@ -15,6 +15,8 @@ import sys
 import time
 from pathlib import Path
 
+from routercore.adapters.jsonl import read_jsonl
+
 ROOT = Path(__file__).resolve().parent.parent
 GATE = 0.995
 
@@ -53,8 +55,7 @@ def main() -> None:
     from routercore.adapters.route_map_config import load_route_map
 
     questions = build_questions(load_route_map(ROOT / "config" / "route_map.yaml").routes)
-    rows = [json.loads(line) for line in (ROOT / "training/data/dataset.jsonl").read_text(
-        encoding="utf-8").splitlines() if line]
+    rows = read_jsonl(ROOT / "training/data/dataset.jsonl")
     texts = [r["text"] for r in random.Random(0).sample([r for r in rows if r["split"] == "val"], args.limit)]
 
     torch_agent = laya.load(args.checkpoint, device="cpu")

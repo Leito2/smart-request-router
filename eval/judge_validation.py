@@ -19,6 +19,7 @@ from pathlib import Path
 
 from judgekit.calibration import cohen_kappa
 from judgekit.judges import parse_json
+from routercore.adapters.jsonl import read_jsonl
 
 ROOT = Path(__file__).resolve().parent.parent
 DIRECTORY = ROOT / "docs" / "judge_validation"
@@ -58,7 +59,7 @@ def agreement(judge: dict[str, int | None], reference: dict[str, int]) -> dict:
 
 
 def _read(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return read_jsonl(path)
 
 
 async def run_judge(cases: list[dict]) -> dict[str, int | None]:

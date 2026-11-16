@@ -331,10 +331,7 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 (ADR-3, the model call is not the bottleneck with SetFit); the gate baseline is the local Laya checkpoint rather than a
 published one; MinIO replaced by a moto S3 server; the retrain step of the pipeline is a stub.
 
-**Known architecture debt** (from the code review): the P1/P3 HTTP adapters live in `services/dispatcher/adapters.py` but
-System 2 imports them too, and the runtime models `RulesModel`/`SetFitRouter` live in `training/baselines/` and are loaded by
-`services/composition.py` through `sys.path`. Both belong in `routercore/adapters` (with heavy deps in an optional extra) per
-ADR-0002; the JSONL loading, model-construction and model-name switches are also duplicated across scripts.
+**Architecture debt (paid).** The review found the P1/P3 HTTP adapters in `services/dispatcher/`, the runtime models in `training/baselines/` (loaded through `sys.path`) and the JSONL, model-construction and model-name logic copied across ~15 scripts. They now live in `routercore/adapters` (`http_clients`, `rules_model`, `setfit_model`, `jsonl`, `model_factory`), with heavy dependencies as optional extras, as ADR-0002 asks. `training/baselines/` keeps only the B1 training script.
 
 **Honest takeaways.** A decision model is only useful if its confidences can be trusted *and* its accuracy is competitive;
 calibration fixes the first, not the second. Measuring the cheap model against a cheap baseline before building around

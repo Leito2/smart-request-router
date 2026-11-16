@@ -8,6 +8,8 @@ import argparse
 import json
 from pathlib import Path
 
+from routercore.adapters.jsonl import read_jsonl
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -35,8 +37,8 @@ def main() -> None:
     parser.add_argument("--feedback", required=True, type=Path)
     args = parser.parse_args()
     path = ROOT / "training" / "data" / "dataset.jsonl"
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
-    feedback = [json.loads(line) for line in args.feedback.read_text(encoding="utf-8").splitlines() if line]
+    rows = read_jsonl(path)
+    feedback = read_jsonl(args.feedback)
     merged = merge_feedback(rows, feedback)
     path.write_text("\n".join(json.dumps(r, ensure_ascii=False, sort_keys=True) for r in merged) + "\n",
                     encoding="utf-8")

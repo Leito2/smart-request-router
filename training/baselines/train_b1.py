@@ -3,7 +3,6 @@
 Usage: python training/baselines/train_b1.py [--per-class 16] [--iterations 10]   (needs `--group ml`)
 """
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
@@ -11,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "training"))
 
+from routercore.adapters.jsonl import read_jsonl  # noqa: E402
 from routercore.adapters.setfit_model import SetFitRouter  # noqa: E402
 
 
@@ -20,8 +20,7 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=10)
     args = parser.parse_args()
 
-    lines = (ROOT / "training/data/dataset.jsonl").read_text(encoding="utf-8").splitlines()
-    records = [json.loads(line) for line in lines]
+    records = read_jsonl(ROOT / "training/data/dataset.jsonl")
     started = time.time()
     router = SetFitRouter.train(records, per_class=args.per_class, iterations=args.iterations)
     router.save(ROOT / "models" / "b1_setfit")

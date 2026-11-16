@@ -12,6 +12,7 @@ from collections import Counter
 from pathlib import Path
 
 from judgekit.drift import drift_report
+from routercore.adapters.jsonl import read_jsonl
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,9 +45,8 @@ def main() -> None:
     parser.add_argument("--evidently", action="store_true", help="also write an Evidently HTML report")
     args = parser.parse_args()
 
-    dataset = [json.loads(line) for line in
-               (ROOT / "training/data/dataset.jsonl").read_text(encoding="utf-8").splitlines() if line]
-    decisions = [json.loads(line) for line in args.current.read_text(encoding="utf-8").splitlines() if line]
+    dataset = read_jsonl(ROOT / "training/data/dataset.jsonl")
+    decisions = read_jsonl(args.current)
     reference, current = reference_counts(dataset), feature_counts(decisions)
     report = drift_report(reference, current, threshold=args.threshold)
     out = ROOT / "docs" / "results" / "drift.json"

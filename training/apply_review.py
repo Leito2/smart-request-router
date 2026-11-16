@@ -8,6 +8,8 @@ import random
 from collections import Counter
 from pathlib import Path
 
+from routercore.adapters.jsonl import read_jsonl
+
 GOLDEN = Path(__file__).parent / "golden_set"
 FIXABLE = ("route", "urgency", "should_escalate")
 
@@ -36,7 +38,7 @@ def apply_reviews(golden: list[dict], reviews: list[dict]) -> tuple[list[dict], 
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    return read_jsonl(path)
 
 
 def main() -> None:

@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "packages" / "routercore" / "src"))
 
+from routercore.adapters.jsonl import read_jsonl  # noqa: E402
 from routercore.adapters.laya_model import CHECKPOINT, build_questions  # noqa: E402
 from routercore.adapters.route_map_config import load_route_map  # noqa: E402
 
@@ -61,8 +62,7 @@ def main() -> None:
     args = parser.parse_args()
 
     routes = load_route_map(ROOT / "config" / "route_map.yaml").routes
-    records = [json.loads(line) for line in (ROOT / "training/data/dataset.jsonl").read_text(
-        encoding="utf-8").splitlines() if line]
+    records = read_jsonl(ROOT / "training/data/dataset.jsonl")
     data = ROOT / "training/data/laya"
     train_rows = to_laya_rows(records, routes, split="train")
     write_jsonl(train_rows[:args.limit] if args.limit else train_rows, data / "train.jsonl")
