@@ -9,7 +9,7 @@
 - System 1 (SetFit, plan B) resolves **41–50 %** of messages on its own at **~86–92 % selective accuracy**, p95 **9–11 ms**
   (offline harness, test / golden sets); the streaming path (Redpanda → Quix → dispatcher, SetFit running in the stream) measures **p50 91 ms / p95 243 ms** end to end.
 - Because only the rest escalates, an LLM is called for **~50–60 %** of messages instead of **100 %** (LLM-only router).
-- A volume surge on one route (×5) is detected in **13.9 s** (10 s windows).
+- A volume surge on one route (×5) is detected in **14–27 s** (10 s windows; 4 runs, 13.9 / 15.4 / 20.4 / 27.4 s).
 - **The thesis is only half proven.** The decision model the project was built around (Laya), fine-tuned on a 4 GB GPU
   (last 8 layers + head, 1 epoch), roughly **ties** SetFit on the in-distribution test sample (S1 coverage 54 % vs 50 %,
   urgent recall 0.978 vs 0.956) but **loses** on the golden and hard sets, on calibration (ECE 0.16 vs 0.03) and on
@@ -269,7 +269,17 @@ Run it on fresh topics: leftover messages or a stale `.quix-state/` from an earl
 by `message_id`) or crash Quix with `InvalidChangelogOffset`; `docker compose --profile core down -v` and `rm -rf .quix-state` reset both.
 Quix flushes output on every commit (default 5 s); `COMMIT_INTERVAL_S=0.5` is what keeps latency low.
 
-**Surge.** `scripts/surge_demo.py`: 10 msg/s, `payments` ×5 after 90 s → alert after **13.9 s** (z-score 110).
+**Surge.** `scripts/surge_demo.py`: 10 msg/s, `payments` ×5 after 90 s → alert after **13.9 s** in the first run and 15.4 / 20.4 /
+27.4 s in three later ones (the alert waits for 2 consecutive 10 s windows, so it depends on where the surge falls in the window
+grid; z-score 108 in the last one). `--hold 70` keeps the stream alive after the alert so Prometheus can scrape it:
+
+![Grafana R3 during the surge: steady traffic, payments ×5, alerts](docs/images/surge.gif)
+
+Screenshots of the live dashboards: [R3 surges](docs/images/grafana-r3-surges.jpg) and [R1 overview](docs/images/grafana-r1-overview.jpg)
+(R2 and R4 were not captured; R4 needs a running System 2 worker). The demo uses the rules model as System 1, which smears part of
+the `payments` burst onto `topup` and `cards`, so the dashboard shows three alerts, not one. Two bugs found while capturing it: the
+alert counter was born at 1 and so never showed in `increase()` (counters are now initialised per route), and the demo killed the
+stream right at the alert, before Prometheus's next scrape (`--hold`).
 
 **Batch evaluation.** `eval/batch_job.py` reads the golden set from a *versioned* S3 bucket and writes a report that cites the
 dataset's `VersionId`, so a number traces back to the exact data (verified against a local S3-compatible server).
@@ -310,7 +320,7 @@ uv sync --all-packages --dev                 # + --group services --group ml --g
 uv run pytest -q                             # 151 tests
 uv run ruff check . && uv run lint-imports   # lint + Clean Architecture contracts
 
-make up PROFILE=core                         # Redpanda (pinned), Redis, Postgres, topics
+make up PROFILE=core                         # Redpanda, Redis, Postgres, topics (all images pinned by digest)
 uv run python scripts/smoke.py --messages 600 --rate 20                 # default model: setfit (--model rules for the plumbing only)
 uv run python scripts/surge_demo.py --model rules
 make up PROFILE=agent                        # + llm-gateway (needs ../llm-gateway)
@@ -329,7 +339,10 @@ wheel; install it **outside the lock** and use `uv run --no-sync` afterwards.
 - *`laya.train` skips all route items:* raise `--max-len` (320 works for 12 options).
 - *KFP local runner fails on Windows* (JSON decode error on backslash paths): run `pipelines/run_local.py` on Linux/macOS/WSL.
 - *MinIO images are no longer published:* the compose `minio` service is a moto S3 server, pinned by digest.
-- *Docker + 8 GB RAM:* start only the profile you need and stop Ollama while training.
+- *Docker + 8 GB RAM:* start only the profile you need and stop Ollama while training. Grafana 13 is OOM-killed (exit 137) at the
+  original 150 MB limit, so its `mem_limit` is 300 MB (the one change to the memory budget).
+- *Smoke or surge counts look doubled, or Quix dies with `InvalidChangelogOffset`:* stale topics or `.quix-state/` from an earlier run:
+  `docker compose --profile core --profile ops down -v` and `rm -rf .quix-state state`.
 
 ---
 
@@ -363,7 +376,7 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
    (CI). Not run against live stores (Redis/Postgres/Kafka behind P1, Qdrant behind P3).
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
 8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
-   Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub; the surge GIF (`docs/images/` is empty);
+   Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub;
    a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, Langfuse datasets/annotation and
    QA-saved percentage from M7b.
 9. **The surge figure uses the rules model** (`surge_demo.json`): it validates the detector, not SetFit's throughput. The

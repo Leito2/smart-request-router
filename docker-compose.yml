@@ -5,7 +5,7 @@ x-core: &core
 services:
   redpanda:
     <<: *core
-    image: redpandadata/redpanda:v26.2.7
+    image: redpandadata/redpanda:v26.2.7@sha256:43545ee03966431f5451e0b3c1e651b39fbe3eb383360220311021f50133b649
     command: ["redpanda", "start", "--smp", "1", "--memory", "512M", "--overprovisioned",
               "--node-id", "0", "--check=false",
               "--kafka-addr", "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092",
@@ -15,7 +15,7 @@ services:
 
   redpanda-init:
     <<: *core
-    image: redpandadata/redpanda:v26.2.7
+    image: redpandadata/redpanda:v26.2.7@sha256:43545ee03966431f5451e0b3c1e651b39fbe3eb383360220311021f50133b649
     depends_on: [redpanda]
     restart: "no"
     entrypoint: ["/bin/bash", "-c"]
@@ -31,7 +31,7 @@ services:
 
   redis:
     <<: *core
-    image: redis:8
+    image: redis:8.10@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb",
               "--maxmemory-policy", "volatile-lru"]   # only TTL keys (cache) are evicted; queues never (PLAN §3.10)
     ports: ["6379:6379"]
@@ -39,7 +39,7 @@ services:
 
   postgres:
     <<: *core
-    image: postgres:17
+    image: postgres:17.12@sha256:846a7ddaa67a4b354ae1d21087b683901aa6113a4ed626d3787cfbf6c85e3e07
     environment: { POSTGRES_DB: router, POSTGRES_USER: router, POSTGRES_PASSWORD: router }
     volumes: ["./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"]
     ports: ["5432:5432"]
@@ -68,7 +68,7 @@ services:
 
   prometheus:
     profiles: ["ops"]
-    image: prom/prometheus:latest           # pin before v1.0
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
     volumes: ["./observability/prometheus:/etc/prometheus:ro"]
     extra_hosts: ["host.docker.internal:host-gateway"]
     ports: ["9090:9090"]
@@ -76,13 +76,13 @@ services:
 
   grafana:
     profiles: ["ops"]
-    image: grafana/grafana:latest           # pin before v1.0
+    image: grafana/grafana:13.3.1@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf
     depends_on: [prometheus]
     environment: { GF_AUTH_ANONYMOUS_ENABLED: "true", GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer }
     volumes:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports: ["3000:3000"]
-    mem_limit: 150m
+    mem_limit: 300m                         # Grafana 13 is OOM-killed at 150m
 
   # App services (replayer, dataflow [Quix Streams], system2, dispatcher, api, mocks) arrive in M4–M5.

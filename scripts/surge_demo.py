@@ -1,7 +1,8 @@
 """Surge demo (PLAN §10 M6): steady traffic, then `payments` x5; prints how fast the detector alerts.
 
 Needs `make up PROFILE=core`. Uses config/surge.demo.yaml (10 s windows). Writes docs/results/surge_demo.json.
-Usage: python scripts/surge_demo.py [--model rules|laya]
+Usage: python scripts/surge_demo.py [--model rules|laya] [--hold SECONDS]
+--hold keeps the stream and the replay alive after the alert, so Prometheus/Grafana (R3) can scrape it.
 """
 import argparse
 import json
@@ -18,6 +19,7 @@ SURGE_AT_S, SURGE_FOR_S, ROUTE = 90, 90, "payments"
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="rules")
+    parser.add_argument("--hold", type=float, default=0, help="seconds to keep running after the alert")
     args = parser.parse_args()
     env = {**os.environ, "MODEL": args.model, "PYTHONPATH": str(ROOT), "USE_TF": "0",
            "SURGE_CONFIG": str(ROOT / "config" / "surge.demo.yaml")}
@@ -42,6 +44,8 @@ def main() -> None:
             if message is not None and not message.error():
                 alerts.append(json.loads(message.value()))
                 detected_after = time.time() - started - SURGE_AT_S
+        if alerts and args.hold:
+            time.sleep(args.hold)
         replay.terminate()
         consumer.close()
     finally:

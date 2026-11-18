@@ -10,6 +10,7 @@ from pathlib import Path
 from prometheus_client import Counter, start_http_server
 from quixstreams import Application
 
+from routercore.adapters.route_map_config import load_route_map
 from routercore.adapters.surge_config import load_surge_config
 from routercore.domain.surge import SurgeMonitor
 from services.composition import ROOT
@@ -29,6 +30,8 @@ def main() -> None:
     config_path = Path(os.environ.get("SURGE_CONFIG", ROOT / "config" / "surge.yaml"))
     monitor = SurgeMonitor(load_surge_config(config_path))
     start_http_server(int(os.environ.get("METRICS_PORT", "8002")))
+    for route in load_route_map(ROOT / "config" / "route_map.yaml").routes:
+        ALERTS.labels(route).inc(0)    # a counter born at 1 has no increase(): the first alert would not show
     # Quix emits output on each commit: a short interval keeps System 1 latency low (default is 5 s)
     app = Application(broker_address=os.environ.get("BROKER", "localhost:9092"),
                       consumer_group="router-surge", auto_offset_reset="earliest",
