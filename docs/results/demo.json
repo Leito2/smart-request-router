@@ -1,0 +1,74 @@
+[
+  {
+    "case": "S1 resolves it (English)",
+    "text": "What is the exchange rate fee when I pay abroad?",
+    "system1_ms": 507.4,
+    "decided_by": "system1",
+    "route": "fees",
+    "priority": "low",
+    "confidence": 1.0
+  },
+  {
+    "case": "S1 resolves it (Spanish)",
+    "text": "Hola, quiero saber cuánto cuesta una transferencia internacional",
+    "system1_ms": 42.2,
+    "decided_by": "system1",
+    "route": "fees",
+    "priority": "low",
+    "confidence": 0.9
+  },
+  {
+    "case": "Urgent: safety net, then System 2",
+    "text": "My card was stolen and someone just spent 400 euros with it, please block everything now",
+    "system1_ms": 50.0,
+    "escalated_because": "urgency_safety_net",
+    "decided_by": "system2",
+    "route": "security",
+    "priority": "critical",
+    "rationale": "The user reports a stolen card and an unauthorized €400 transaction, requesting immediate blocking. This is a high‑urgency security incident requiring immediate action.",
+    "tools_called": [
+      "search_kb",
+      "get_customer_history",
+      "get_customer_history"
+    ],
+    "served_by": [
+      "groq:openai/gpt-oss-120b"
+    ],
+    "system2_s": 6.1
+  },
+  {
+    "case": "Needs a tool: P1 payment decision",
+    "text": "Why was my payment pay_8842 blocked? I need it to go through today",
+    "system1_ms": 32.4,
+    "escalated_because": "urgency_safety_net",
+    "decided_by": "system2",
+    "route": "fraud_inquiry",
+    "priority": "high",
+    "rationale": "The user is asking why a specific payment (pay_8842) was blocked and needs it processed urgently. This matches the fraud_inquiry route for blocked or flagged payments, and the urgency scores indicate a high urgency (urgency level 1).",
+    "tools_called": [
+      "lookup_payment_decision"
+    ],
+    "served_by": [
+      "groq:openai/gpt-oss-120b"
+    ],
+    "system2_s": 2.2
+  },
+  {
+    "case": "Vague message",
+    "text": "Can you help?",
+    "system1_ms": 40.4,
+    "escalated_because": "urgency_safety_net",
+    "decided_by": "system2",
+    "route": "general",
+    "priority": "critical",
+    "rationale": "The user asks a vague request for help with no specific domain, and the intent model assigns the highest probability to the 'general' category (0.69). The escalation flag and the highest urgency score (level 3 = 0.41) indicate a critical priority.",
+    "tools_called": [
+      "get_customer_history",
+      "get_customer_history"
+    ],
+    "served_by": [
+      "groq:openai/gpt-oss-120b"
+    ],
+    "system2_s": 15.3
+  }
+]

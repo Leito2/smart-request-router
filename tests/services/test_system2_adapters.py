@@ -1,6 +1,7 @@
 import httpx
+import pytest
 
-from services.system2.adapters import GatewayLlm, LiveTools, extra_body_from_env
+from services.system2.adapters import GatewayLlm, LiveTools, QuotaPacedLlm, extra_body_from_env
 
 
 def test_gateway_llm_sends_alias_and_returns_text_and_counts_tokens():
@@ -52,3 +53,23 @@ def test_extra_body_defaults_to_no_thinking_for_ollama_and_is_overridable_for_th
     assert extra_body_from_env({}) == {"reasoning_effort": "low"}
     monkeypatch.delenv("LLM_EXTRA_BODY")
     assert extra_body_from_env({"x": 1}) == {"x": 1}
+
+
+def test_quota_paced_llm_waits_out_429_and_503_but_not_other_errors(monkeypatch):
+    monkeypatch.setattr("services.system2.adapters.time.sleep", lambda s: slept.append(s))
+    slept, statuses = [], iter([503, 429, 200])
+
+    def handler(request):
+        status = next(statuses)
+        headers = {"retry-after": "7"} if status == 429 else {}
+        return httpx.Response(status, headers={**headers, "x-gateway-provider": "groq:m"},
+                              json={"choices": [{"message": {"content": "ok"}}]})
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    paced = QuotaPacedLlm(GatewayLlm("http://gw", client=client))
+    assert paced("s", "u") == "ok"
+    assert slept == [10, 7] and paced.waited_s == 17 and paced.providers == ["groq:m"]
+
+    broken = QuotaPacedLlm(GatewayLlm("http://gw", client=httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(401)))))
+    with pytest.raises(httpx.HTTPStatusError):
+        broken("s", "u")

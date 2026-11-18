@@ -66,33 +66,6 @@ def score_escalated(rows: list[dict], laya_routes: dict[int, str], s2_routes: di
             "significant": boot.significant}
 
 
-class QuotaPacedLlm:
-    """Eval-time wrapper: the gateway enforces the free tier's outbound quotas, so a 429/503 means "wait",
-    not "fail". Waits for Retry-After (else 10 s) and retries; other errors propagate to the agent."""
-
-    def __init__(self, llm, *, retries: int = 90, default_wait_s: float = 10):
-        self._llm, self._retries, self._wait = llm, retries, default_wait_s
-        self.waited_s = 0.0
-
-    @property
-    def tokens(self) -> int:
-        return self._llm.tokens
-
-    def __call__(self, system: str, user: str) -> str:
-        import httpx
-
-        for attempt in range(self._retries + 1):
-            try:
-                return self._llm(system, user)
-            except httpx.HTTPStatusError as error:
-                if error.response.status_code not in (429, 503) or attempt == self._retries:
-                    raise
-                wait = float(error.response.headers.get("retry-after", self._wait))
-                self.waited_s += wait
-                time.sleep(wait)
-        raise AssertionError("unreachable")
-
-
 class MockTools:
     def get_customer_history(self, customer_id: str) -> list[str]:
         return []
@@ -105,7 +78,7 @@ class MockTools:
 
 
 def main() -> None:
-    from services.system2.adapters import NO_THINKING, GatewayLlm, extra_body_from_env
+    from services.system2.adapters import NO_THINKING, GatewayLlm, QuotaPacedLlm, extra_body_from_env
     from services.system2.graph import build_agent
 
     parser = argparse.ArgumentParser()

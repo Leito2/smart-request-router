@@ -56,6 +56,12 @@ compared under the same policy only in those two.
 | qwen3:1.7b, with tools (Laya policy) | 0.500 → 0.539 | +3.9 pp | [−6.6, +14.5] | no | 1 % | 8.8 s |
 | qwen3:1.7b, no tools (Laya policy) | 0.500 → 0.487 | −1.3 pp | [−13.2, +9.2] | no | 8 % | 4.3 s |
 
+**gpt-oss-120b through the gateway** (`smart_router` → Groq free tier, `reasoning_effort: low`, full 394-row hard set, 255
+escalated; [`b5-b1-hard-gpt-oss-120b.json`](docs/results/b5-b1-hard-gpt-oss-120b.json)): accuracy on the escalated rows
+S1 0.549 → S2 0.282 (−26.7 pp, CI [−32.9, −20.4]), but **65 % of them fell back to `triage`**: Groq's free-tier limits
+(429s, then the gateway's breaker) made the run wait ≈ 2.4 h in quotas and give up on the rest. It is **not** a quality
+result either. The 5-message demo, which fits the quota, shows the model deciding well (`make demo`, Part V).
+
 gemma3:4b is not a quality result: on a 4 GB GPU it takes ~51 s per case, so 77 % of cases hit the 20 s timeout and
 fall back to the `triage` queue. End to end (qwen3, SetFit policy) the hard set reaches accuracy 0.56 with 660 LLM calls per 1k messages.
 
@@ -270,6 +276,29 @@ thresholds; ≈ 950 with Laya's, whose coverage is 3–12 %).
 ---
 
 ## Part V — Run It Yourself
+
+### Try it in 5 minutes (no Docker)
+
+![Five-message demo: System 1 answers two, System 2 (gpt-oss-120b through the gateway) resolves three](docs/images/demo.gif)
+
+1. **Without installing anything:** open [`notebooks/system1_colab.ipynb`](notebooks/system1_colab.ipynb) in Google Colab
+   (free CPU runtime). It downloads the published SetFit model from the Hub and routes your messages with the same
+   `RouteMessages` use case as the services. System 2 is not part of it.
+2. **Locally, the whole router:**
+   ```bash
+   uv sync --all-packages --dev --group services --extra setfit      # or: uv sync --all-packages --dev --group services --group ml
+   uv run --no-sync python -c "from huggingface_hub import snapshot_download as d; d('WhiteUniversal/smart-request-router-setfit', local_dir='models/b1_setfit', allow_patterns=['intent/*','urgency/*','labels.json'])"
+   uv run --no-sync python scripts/demo.py --no-s2     # System 1 only; no keys, no gateway
+   uv run --no-sync python scripts/demo.py             # + System 2 through the llm-gateway (needs GATEWAY_URL/GATEWAY_KEY in .env)
+   ```
+   Five messages: two System 1 answers (English and Spanish), a stolen-card message that trips the urgency safety net, a
+   blocked-payment question that makes the agent call the P1 tool, and a vague one. Each prints who decided, why, which tools the
+   agent used and which LLM served it; the run is written to [`docs/results/demo.json`](docs/results/demo.json) and, with
+   `LANGFUSE_*` keys in `.env`, traced in Langfuse. The last run used `groq:openai/gpt-oss-120b`; the P1/P3 tools are in-memory
+   stand-ins unless you pass `--p1` / `--p3`. The GIF is rendered from that JSON by `scripts/make_demo_gif.py`.
+   Note the cost of the safety net: 3 of the 5 messages, including a vague "Can you help?", are escalated for urgency.
+
+### Full stack
 
 ```bash
 python scripts/doctor.py                     # prerequisites

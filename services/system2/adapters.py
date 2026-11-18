@@ -1,6 +1,7 @@
 """System 2 adapters: LLM through the gateway, and the agent's tools over the existing ports."""
 import json
 import os
+import time
 
 import httpx
 
@@ -28,6 +29,7 @@ class GatewayLlm:
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = client or httpx.Client(timeout=timeout_s)
         self.tokens = 0
+        self.providers: list[str] = []         # who answered each call (x-gateway-provider), for audits
 
     def __call__(self, system: str, user: str) -> str:
         response = self._client.post(
@@ -37,7 +39,37 @@ class GatewayLlm:
         response.raise_for_status()
         body = response.json()
         self.tokens += body.get("usage", {}).get("total_tokens", 0)
+        self.providers.append(response.headers.get("x-gateway-provider", self._model))
         return body["choices"][0]["message"]["content"] or ""
+
+
+class QuotaPacedLlm:
+    """Eval-time wrapper: the gateway enforces the free tier's outbound quotas, so a 429/503 means "wait",
+    not "fail". Waits for Retry-After (else 10 s) and retries; other errors propagate to the agent."""
+
+    def __init__(self, llm, *, retries: int = 90, default_wait_s: float = 10):
+        self._llm, self._retries, self._wait = llm, retries, default_wait_s
+        self.waited_s = 0.0
+
+    @property
+    def tokens(self) -> int:
+        return self._llm.tokens
+
+    @property
+    def providers(self) -> list[str]:
+        return self._llm.providers
+
+    def __call__(self, system: str, user: str) -> str:
+        for attempt in range(self._retries + 1):
+            try:
+                return self._llm(system, user)
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code not in (429, 503) or attempt == self._retries:
+                    raise
+                wait = float(error.response.headers.get("retry-after", self._wait))
+                self.waited_s += wait
+                time.sleep(wait)
+        raise AssertionError("unreachable")
 
 
 class RedisHistory:
