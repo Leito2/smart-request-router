@@ -7,7 +7,7 @@
 **Headline (measured, 8 GB laptop, no cloud):**
 
 - System 1 (SetFit, plan B) resolves **41–50 %** of messages on its own at **~86–92 % selective accuracy**, p95 **9–11 ms**
-  (offline harness, test / golden sets); the streaming path (Redpanda → Quix → dispatcher) adds **p50 51 ms / p95 87 ms**.
+  (offline harness, test / golden sets); the streaming path (Redpanda → Quix → dispatcher, SetFit running in the stream) measures **p50 91 ms / p95 243 ms** end to end.
 - Because only the rest escalates, an LLM is called for **~50–60 %** of messages instead of **100 %** (LLM-only router).
 - A volume surge on one route (×5) is detected in **13.9 s** (10 s windows).
 - **The thesis is only half proven.** The decision model the project was built around (Laya), fine-tuned on a 4 GB GPU
@@ -261,8 +261,12 @@ judge is a **signal, never evidence**, as PLAN §5.3 says; reports in `docs/resu
 distribution, no labels needed. On the surge-demo traffic (payments ×5) the route mix drifts (PSI 3.94, threshold 0.25) and
 the language mix does not (0.21); an Evidently report is in `docs/results/drift_evidently.html`.
 
-**Streaming.** `scripts/smoke.py` (Redpanda + Quix + dispatcher + mocks, 600 messages at 20/s, rules model so the number
-isolates the plumbing): 78 % routed by System 1, 0 in the dead-letter topic, **p50 51 ms / p95 87 ms** from sent to routed.
+**Streaming.** `scripts/smoke.py` (Redpanda + Quix + dispatcher + mocks, 600 messages at 20/s, **SetFit** as System 1,
+[`smoke.json`](docs/results/smoke.json)): 49.6 % routed by System 1 (297 routed, 302 escalated: 186 urgency safety net, 64
+multi-intent, 52 low confidence), 0 in the dead-letter topic, **p50 91 ms / p95 243 ms** from sent to routed. The plumbing-only
+run with the rules model (78 % routed, p50 51 ms / p95 87 ms) is kept in [`smoke_rules.json`](docs/results/smoke_rules.json).
+Run it on fresh topics: leftover messages or a stale `.quix-state/` from an earlier run inflate the counts (the dispatcher dedupes
+by `message_id`) or crash Quix with `InvalidChangelogOffset`; `docker compose --profile core down -v` and `rm -rf .quix-state` reset both.
 Quix flushes output on every commit (default 5 s); `COMMIT_INTERVAL_S=0.5` is what keeps latency low.
 
 **Surge.** `scripts/surge_demo.py`: 10 msg/s, `payments` ×5 after 90 s → alert after **13.9 s** (z-score 110).
@@ -307,7 +311,7 @@ uv run pytest -q                             # 151 tests
 uv run ruff check . && uv run lint-imports   # lint + Clean Architecture contracts
 
 make up PROFILE=core                         # Redpanda (pinned), Redis, Postgres, topics
-uv run python scripts/smoke.py --model rules --messages 600 --rate 20   # default model: setfit
+uv run python scripts/smoke.py --messages 600 --rate 20                 # default model: setfit (--model rules for the plumbing only)
 uv run python scripts/surge_demo.py --model rules
 make up PROFILE=agent                        # + llm-gateway (needs ../llm-gateway)
 
@@ -321,7 +325,7 @@ wheel; install it **outside the lock** and use `uv run --no-sync` afterwards.
 
 **Troubleshooting.**
 
-- *Latency looks huge in the smoke test:* consumers were still joining the group; the script warms up 20 s (rules) / 40 s (Laya).
+- *Latency looks huge in the smoke test:* consumers were still joining the group; the script warms up 20 s (rules) / 40 s (SetFit, Laya).
 - *`laya.train` skips all route items:* raise `--max-len` (320 works for 12 options).
 - *KFP local runner fails on Windows* (JSON decode error on backslash paths): run `pipelines/run_local.py` on Linux/macOS/WSL.
 - *MinIO images are no longer published:* the compose `minio` service is a moto S3 server, pinned by digest.
@@ -362,8 +366,8 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
    Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub; the surge GIF (`docs/images/` is empty);
    a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, Langfuse datasets/annotation and
    QA-saved percentage from M7b.
-9. **Streaming figures use the rules model** (`smoke.json`, `surge_demo.json`): they validate the plumbing and the
-   detector, not SetFit's or Laya's throughput. SetFit's own p95 is 9–18 ms offline.
+9. **The surge figure uses the rules model** (`surge_demo.json`): it validates the detector, not SetFit's throughput. The
+   `smoke.json` figure is SetFit's.
 
 **Deviations from PLAN.** Last 8 encoder layers trained instead of LoRA (the head-only run is kept as the negative baseline); Quix handles messages one by one rather than micro-batches of 16
 (ADR-3, the model call is not the bottleneck with SetFit); the gate baseline is the local Laya checkpoint rather than a

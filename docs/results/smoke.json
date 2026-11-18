@@ -1,15 +1,15 @@
 {
-  "model": "rules",
+  "model": "setfit",
   "sent": 600,
-  "routed": 468,
-  "escalated": 131,
+  "routed": 297,
+  "escalated": 302,
   "dlq": 0,
-  "coverage_s1": 0.7813,
+  "coverage_s1": 0.4958,
   "escalation_reasons": {
-    "low_confidence": 121,
-    "urgency_safety_net": 9,
-    "ood": 1
+    "urgency_safety_net": 186,
+    "multi_intent": 64,
+    "low_confidence": 52
   },
-  "latency_ms_p50": 51.1,
-  "latency_ms_p95": 87.3
+  "latency_ms_p50": 90.7,
+  "latency_ms_p95": 242.6
 }
