@@ -2,11 +2,17 @@
 agent never depends on the observability stack to route a message.
 
 Langfuse Cloud (free tier) until M10; self-hosted Langfuse needs more RAM than this machine has.
+
+Everything sent to Langfuse goes through the Presidio redactor (card numbers, IBAN, email, phone, IP, NIF/NIE
+are replaced by `<ENTITY>`). If it cannot be loaded, tracing is OFF rather than leaking the message text.
 """
+import logging
 import os
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any, Protocol
+
+log = logging.getLogger("system2.tracing")
 
 
 class Span(Protocol):
@@ -28,11 +34,14 @@ class NoopTracer:
 
 
 class LangfuseTracer:
-    """Langfuse SDK v3: one observation per agent run, with input, output and metadata."""
+    """Langfuse SDK: one observation per agent run, with input, output and metadata, PII redacted."""
 
     def __init__(self):
-        from langfuse import get_client
+        from langfuse import Langfuse, get_client
 
+        from routercore.adapters.pii import PiiRedactor
+
+        Langfuse(mask=PiiRedactor().mask)      # registers the masked client that get_client() returns below
         self._client = get_client()
 
     def span(self, name: str, input: Any) -> AbstractContextManager[Span]:
@@ -43,7 +52,8 @@ def from_env() -> Tracer:
     if os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY"):
         try:
             return LangfuseTracer()
-        except Exception:                      # a broken tracer must never stop routing
+        except Exception as error:             # a broken tracer must never stop routing, nor leak text
+            log.warning("tracing disabled: %s: %s", type(error).__name__, error)
             return NoopTracer()
     return NoopTracer()
 

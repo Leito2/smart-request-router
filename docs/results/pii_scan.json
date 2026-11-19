@@ -1,0 +1,23 @@
+{
+  "train+test": {
+    "rows": 14953,
+    "rows_flagged": 0,
+    "strong": {},
+    "weak": {},
+    "flagged": []
+  },
+  "golden": {
+    "rows": 497,
+    "rows_flagged": 0,
+    "strong": {},
+    "weak": {},
+    "flagged": []
+  },
+  "hard": {
+    "rows": 394,
+    "rows_flagged": 0,
+    "strong": {},
+    "weak": {},
+    "flagged": []
+  }
+}

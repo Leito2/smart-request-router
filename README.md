@@ -326,6 +326,20 @@ runs (two models, two threshold sets) can be compared in the UI. A 40-item smoke
 (route_correct 0.475, urgency_correct 0.775, escalated 0.575 on those first 40 items: a smoke, not a result; the full numbers
 are in the evaluation tables above).
 
+### PII
+
+Message text is the only sensitive thing in the stack, and the services never log it (only `message_id` and the route). It
+could leave through Langfuse, so every trace goes through a Presidio redactor (`routercore.adapters.pii`, extra `pii`):
+card numbers (Luhn-checked), IBAN, email, phone, IP, Spanish NIF/NIE, US SSN and crypto wallets become `<CREDIT_CARD>`,
+`<EMAIL_ADDRESS>` and so on before the SDK sends them (`Langfuse(mask=...)`). Checked against Langfuse Cloud: a trace with a card,
+an IBAN and an email is stored fully redacted. If the redactor cannot load, tracing is switched off instead of sending raw text.
+`scripts/pii_scan.py` (`make pii-scan`) scans the datasets and writes counts and row ids, never the text; the 15,844 rows
+(train/test, golden, hard) have no hits, and `langfuse_datasets.py` refuses to upload if that ever changes.
+**Limits:** pattern recognizers on a blank spaCy pipeline, so no model download and no names or addresses (that needs an NER
+model); the phone recognizer is the noisy one (score 0.4), so a human should look at weak hits; redaction costs ~0.5 ms per message.
+Adding the `pii` group pulled spaCy, whose dependencies pin numpy to 2.4.6 in `uv.lock` (the CI quality-gate job keeps its own
+pins). The quality gate still passes on 2.4.6 (checked locally).
+
 ### Full stack
 
 ```bash
@@ -393,7 +407,7 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
 8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
    Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub;
-   a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, and the Langfuse annotation queue and
+   a Von/OpenVINO latency comparison (R1b); semantic (embedding) drift, and the Langfuse annotation queue and
    QA-saved percentage from M7b.
 9. **The surge figure uses the rules model** (`surge_demo.json`): it validates the detector, not SetFit's throughput. The
    `smoke.json` figure is SetFit's.

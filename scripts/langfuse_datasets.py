@@ -7,7 +7,7 @@
     uv run --no-sync python scripts/langfuse_datasets.py --dry-run          # count rows, send nothing
 
 Item ids are `<dataset>/<row id>`, so re-running updates items instead of duplicating them and removes stale ones. A new data version gets a
-new `--version` (dataset name `router-<set>-<version>`). Needs LANGFUSE_* in `.env`. The texts are public
+new `--version` (dataset name `router-<set>-<version>`). Aborts if the Presidio scan finds PII. Needs LANGFUSE_* in `.env`. The texts are public
 Banking77 rows plus synthetic hard cases: no customer data.
 """
 import argparse
@@ -114,6 +114,14 @@ def main() -> None:
         for s, rows in loaded.items():
             print(f"router-{s}-{args.version}: {len(rows)} items (dry run)")
         return
+
+    from routercore.adapters.pii import PiiRedactor
+    from scripts.pii_scan import scan
+
+    redactor = PiiRedactor()
+    for s, rows in loaded.items():          # PLAN §12: nothing enters a dataset without a PII scan
+        if scan(rows, redactor)["strong"]:
+            raise SystemExit(f"{s}: strong PII findings, upload aborted (run scripts/pii_scan.py)")
 
     from langfuse import get_client
     client = get_client()

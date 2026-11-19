@@ -45,3 +45,17 @@ def test_trace_run_marks_failures_and_reraises():
 
 def test_noop_tracer_is_transparent():
     assert trace_run(NoopTracer(), "x", {}, lambda: 41 + 1) == 42
+
+
+def test_tracing_is_off_not_leaky_when_the_redactor_cannot_load(monkeypatch):
+    import routercore.adapters.pii as pii
+    from services.system2.tracing import from_env
+
+    class Broken:
+        def __init__(self):
+            raise ImportError("presidio missing")
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
+    monkeypatch.setattr(pii, "PiiRedactor", Broken)
+    assert isinstance(from_env(), NoopTracer)
