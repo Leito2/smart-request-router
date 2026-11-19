@@ -15,7 +15,7 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "Route distribution",
+      "title": "Route mix (share of decisions, last minute)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -28,14 +28,14 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "percentunit"
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(router_route_messages_total[5m])) by (route)",
+          "expr": "sum by (route) (rate(router_route_messages_total[1m])) / scalar(sum(rate(router_route_messages_total[1m])))",
           "legendFormat": "{{route}}",
           "datasource": {
             "type": "prometheus",
@@ -101,6 +101,88 @@
           "refId": "A",
           "expr": "sum(rate(router_escalations_total{reason=\"ood\"}[5m]))",
           "legendFormat": "ood/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Route-mix drift (PSI of the last 500 decisions vs training)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "router_route_psi",
+          "legendFormat": "PSI",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "vector(0.25)",
+          "legendFormat": "major shift (0.25)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "vector(0.1)",
+          "legendFormat": "moderate (0.1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Escalations by reason",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(router_escalations_total[1m])) by (reason)",
+          "legendFormat": "{{reason}}",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"

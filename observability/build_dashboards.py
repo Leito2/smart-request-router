@@ -42,13 +42,20 @@ DASHBOARDS = {
               0, 16, kind="stat", w=6),
     ]),
     "r2-routing-quality": dashboard("r2-routing-quality", "R2 · Routing Quality", [
-        panel(1, "Route distribution", [
-            ("sum(rate(router_route_messages_total[5m])) by (route)", "{{route}}")], 0, 0, w=24),
+        panel(1, "Route mix (share of decisions, last minute)", [
+            ("sum by (route) (rate(router_route_messages_total[1m])) / "
+             "scalar(sum(rate(router_route_messages_total[1m])))", "{{route}}")],
+            0, 0, unit="percentunit", w=24),
         panel(2, "Mean System 1 confidence", [
             ("rate(router_confidence_sum[5m]) / rate(router_confidence_count[5m])", "mean confidence")],
             0, 8, unit="percentunit"),
         panel(3, "Out-of-distribution escalations", [
             ('sum(rate(router_escalations_total{reason="ood"}[5m]))', "ood/s")], 12, 8, unit="ops"),
+        panel(4, "Route-mix drift (PSI of the last 500 decisions vs training)", [
+            ("router_route_psi", "PSI"), ("vector(0.25)", "major shift (0.25)"),
+            ("vector(0.1)", "moderate (0.1)")], 0, 16),
+        panel(5, "Escalations by reason", [
+            ("sum(increase(router_escalations_total[1m])) by (reason)", "{{reason}}")], 12, 16),
     ]),
     "r3-surges": dashboard("r3-surges", "R3 · Surges", [
         panel(1, "Volume per route (per minute)", [
@@ -64,6 +71,13 @@ DASHBOARDS = {
         panel(2, "Fallbacks to triage", [("sum(increase(s2_fallback_total[5m]))", "fallbacks")],
               12, 0, kind="stat", w=6),
         panel(3, "Tokens per minute", [("sum(rate(s2_tokens_total[1m])) * 60", "tokens/min")], 18, 0, w=6),
+        panel(4, "Steps per escalation (tool calls per case)", [
+            ("sum(increase(s2_tool_calls_total[5m])) / sum(increase(s2_latency_seconds_count[5m]))",
+             "tool calls / case")], 0, 8, kind="stat", w=6),
+        panel(5, "Tool calls per minute", [
+            ("sum(increase(s2_tool_calls_total[1m])) by (tool)", "{{tool}}")], 6, 8, w=18),
+        panel(6, "System 2 decisions by route", [
+            ("sum(increase(s2_decisions_total[5m])) by (route)", "{{route}}")], 0, 16, w=24),
     ]),
 }
 

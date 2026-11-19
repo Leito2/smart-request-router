@@ -23,6 +23,7 @@ from services.envfile import load_env
 from services.system2.adapters import (
     GATEWAY_EXTRA_BODY,
     GatewayLlm,
+    InstrumentedTools,
     LiveTools,
     RedisHistory,
     extra_body_from_env,
@@ -36,6 +37,8 @@ S2_LATENCY = Histogram("s2_latency_seconds", "System 2 time per escalation",
                        buckets=(.5, 1, 2, 5, 10, 20))
 S2_FALLBACK = Counter("s2_fallback_total", "System 2 decisions that fell back to triage")
 S2_TOKENS = Counter("s2_tokens_total", "LLM tokens spent by System 2")
+S2_TOOL_CALLS = Counter("s2_tool_calls_total", "Agent tool calls (its steps)", ["tool"])
+S2_DECISIONS = Counter("s2_decisions_total", "System 2 decisions by route", ["route"])
 
 
 def fallback(escalation: dict, error: str) -> dict:
@@ -54,9 +57,11 @@ def main() -> None:
     llm = GatewayLlm(os.environ.get("GATEWAY_URL", "http://localhost:8080"),
                      model=os.environ.get("LLM_MODEL", "smart_router"), api_key=os.environ.get("GATEWAY_KEY"),
                      extra_body=extra_body_from_env(GATEWAY_EXTRA_BODY))
-    tools = LiveTools(RedisHistory(redis.Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))),
-                      HttpPaymentDecisions(os.environ.get("P1_URL", "http://localhost:8010")),
-                      HttpKnowledgeBase(os.environ.get("P3_URL", "http://localhost:8010")))
+    tools = InstrumentedTools(
+        LiveTools(RedisHistory(redis.Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))),
+                  HttpPaymentDecisions(os.environ.get("P1_URL", "http://localhost:8010")),
+                  HttpKnowledgeBase(os.environ.get("P3_URL", "http://localhost:8010"))),
+        lambda tool: S2_TOOL_CALLS.labels(tool).inc())
     agent = build_agent(llm, tools, routes)
     tracer = from_env()
     broker = os.environ.get("BROKER", "localhost:9092")
@@ -84,6 +89,7 @@ def main() -> None:
             decision = fallback(raw, type(error).__name__)
         S2_LATENCY.observe(time.perf_counter() - began)
         S2_TOKENS.inc(llm.tokens - tokens_before)
+        S2_DECISIONS.labels(decision["route"]).inc()
         if decision["route"] == FALLBACK_ROUTE:
             S2_FALLBACK.inc()
         producer.produce("routed", key=decision["message_id"], value=json.dumps(decision))

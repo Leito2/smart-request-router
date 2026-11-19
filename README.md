@@ -302,11 +302,27 @@ grid; z-score 108 in the last one). `--hold 70` keeps the stream alive after the
 
 ![Grafana R3 during the surge: steady traffic, payments ×5, alerts](docs/images/surge.gif)
 
-Screenshots of the live dashboards: [R3 surges](docs/images/grafana-r3-surges.jpg) and [R1 overview](docs/images/grafana-r1-overview.jpg)
-(R2 and R4 were not captured; R4 needs a running System 2 worker). The demo uses the rules model as System 1, which smears part of
-the `payments` burst onto `topup` and `cards`, so the dashboard shows three alerts, not one. Two bugs found while capturing it: the
-alert counter was born at 1 and so never showed in `increase()` (counters are now initialised per route), and the demo killed the
-stream right at the alert, before Prometheus's next scrape (`--hold`).
+Screenshots of the live dashboards: [R1 overview](docs/images/grafana-r1-overview.jpg), [R2 routing quality](docs/images/grafana-r2-routing-quality.jpg),
+[R3 surges](docs/images/grafana-r3-surges.jpg) and [R4 System 2](docs/images/grafana-r4-system2.jpg). The surge demo uses the rules model as
+System 1, which smears part of the `payments` burst onto `topup` and `cards`, so the dashboard shows three alerts, not one. Two bugs
+found while capturing it: the alert counter was born at 1 and so never showed in `increase()` (counters are now initialised per
+route), and the demo killed the stream right at the alert, before Prometheus's next scrape (`--hold`).
+
+**Dashboards R2 and R4.** [`scripts/dashboards_demo.py`](scripts/dashboards_demo.py) starts the dataflow, the surge detector and
+(with `--system2`) the System 2 worker and the P1/P3 mocks, replays traffic and holds so Prometheus keeps scraping. R2 adds the
+route-mix drift (`router_route_psi`: PSI of the last 500 decisions against `config/route_reference.json`, built by
+`scripts/make_route_reference.py` from the training mix; it stays empty until 250 decisions, because a 100-message window showed
+PSI 0.14 from sampling noise alone) and the escalations by reason. R4 adds steps per escalation (tool calls per case), tool calls
+by tool and System 2 decisions by route. What the captures show, and what they do not:
+
+- With SetFit v2 the stream routed about 63–67 % of messages through System 1 (the old smoke figure of 49.6 % is from the earlier
+  urgency head). At 25 msg/s offered the dataflow plateaued near 16 msg/s on this CPU; p95 processing time was 100–150 ms.
+- R2's escalation reasons are dominated by `ood` and `low_confidence` because the current policy has `max_entropy` 0.6 and
+  `margin` 0.0: `multi_intent` no longer fires, and "ood" here mostly means "too uncertain", not a different language or domain.
+- The R4 run is small (0.2 msg/s for 200 s, 11 escalations handled, 1.3 tool calls per case, latency p50 about 4 s, p95 about
+  9.5 s) and **6 of the 11 ended as fallbacks to triage**, because the free Groq quota behind the gateway opened its breaker
+  (`503 all_providers_unavailable`). That is the designed degradation, not a measurement of the agent's quality.
+- There is no human-feedback panel: nothing produces that stream yet (it belongs to the Langfuse annotation queue).
 
 **Batch evaluation.** `eval/batch_job.py` reads the golden set from a *versioned* S3 bucket and writes a report that cites the
 dataset's `VersionId`, so a number traces back to the exact data (verified against a local S3-compatible server).
@@ -372,12 +388,14 @@ pins). The quality gate still passes on 2.4.6 (checked locally).
 ```bash
 python scripts/doctor.py                     # prerequisites
 uv sync --all-packages --dev                 # + --group services --group ml --group mlops as needed
-uv run pytest -q                             # 151 tests
+uv run pytest -q                             # 195 tests
 uv run ruff check . && uv run lint-imports   # lint + Clean Architecture contracts
 
 make up PROFILE=core                         # Redpanda, Redis, Postgres, topics (all images pinned by digest)
 uv run python scripts/smoke.py --messages 600 --rate 20                 # default model: setfit (--model rules for the plumbing only)
 uv run python scripts/surge_demo.py --model rules
+make up PROFILE=ops                          # + Prometheus and Grafana (localhost:3000)
+uv run python scripts/dashboards_demo.py --rate 5 --duration 200 --surge payments:5:100:60   # feeds R1-R3
 make up PROFILE=agent                        # + llm-gateway (needs ../llm-gateway)
 
 uv run python eval/run_eval.py --router b1 --set golden --policy --limit 600

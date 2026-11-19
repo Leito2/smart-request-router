@@ -73,3 +73,19 @@ def test_quota_paced_llm_waits_out_429_and_503_but_not_other_errors(monkeypatch)
         transport=httpx.MockTransport(lambda request: httpx.Response(401)))))
     with pytest.raises(httpx.HTTPStatusError):
         broken("s", "u")
+
+
+def test_instrumented_tools_report_each_call_by_name_and_return_the_result():
+    from services.system2.adapters import InstrumentedTools
+
+    class Tools:
+        def search_kb(self, question):
+            return f"kb:{question}"
+
+        def get_customer_history(self, customer_id):
+            return [customer_id]
+
+    seen = []
+    tools = InstrumentedTools(Tools(), seen.append)
+    assert tools.search_kb("fees") == "kb:fees" and tools.get_customer_history("c1") == ["c1"]
+    assert seen == ["search_kb", "get_customer_history"]

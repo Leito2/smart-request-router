@@ -1,0 +1,14 @@
+{
+  "account": 350,
+  "cards": 1989,
+  "disputes": 855,
+  "fees": 1372,
+  "fraud_inquiry": 460,
+  "general": 102,
+  "knowledge": 936,
+  "kyc": 477,
+  "payments": 597,
+  "security": 827,
+  "topup": 1215,
+  "transfers": 1307
+}

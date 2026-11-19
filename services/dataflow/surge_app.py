@@ -7,16 +7,18 @@ Run: python -m services.dataflow.surge_app   (env: BROKER, METRICS_PORT)
 import os
 from pathlib import Path
 
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter, Gauge, start_http_server
 from quixstreams import Application
 
 from routercore.adapters.route_map_config import load_route_map
 from routercore.adapters.surge_config import load_surge_config
 from routercore.domain.surge import SurgeMonitor
 from services.composition import ROOT
+from services.dataflow.route_drift import RouteDrift, load_reference
 
 DECISIONS = Counter("router_route_messages_total", "Decisions by route", ["route"])
 ALERTS = Counter("router_surge_alerts_total", "Surge alerts by route", ["route"])
+ROUTE_PSI = Gauge("router_route_psi", "PSI of the last 500 decisions' route mix vs the training mix")
 
 
 def route_of(value: dict) -> str:
@@ -29,6 +31,7 @@ def route_of(value: dict) -> str:
 def main() -> None:
     config_path = Path(os.environ.get("SURGE_CONFIG", ROOT / "config" / "surge.yaml"))
     monitor = SurgeMonitor(load_surge_config(config_path))
+    drift = RouteDrift(load_reference(ROOT / "config" / "route_reference.json"))
     start_http_server(int(os.environ.get("METRICS_PORT", "8002")))
     for route in load_route_map(ROOT / "config" / "route_map.yaml").routes:
         ALERTS.labels(route).inc(0)    # a counter born at 1 has no increase(): the first alert would not show
@@ -41,6 +44,8 @@ def main() -> None:
     def observe(value: dict, key, timestamp_ms: int, headers) -> list[dict]:
         route = route_of(value)
         DECISIONS.labels(route).inc()
+        if (shift := drift.observe(route)) is not None:
+            ROUTE_PSI.set(shift)
         fired = monitor.add(route, timestamp_ms * 1_000_000)
         if fired:
             ALERTS.labels(route).inc(len(fired))

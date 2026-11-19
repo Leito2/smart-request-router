@@ -83,6 +83,21 @@ class RedisHistory:
                 for item in self._redis.lrange(f"{self._prefix}{customer_id}", 0, 9)]
 
 
+class InstrumentedTools:
+    """Wraps the agent's tools and reports each call by tool name (the R4 dashboard's steps per case)."""
+
+    def __init__(self, inner, on_call):
+        self._inner, self._on_call = inner, on_call
+
+    def __getattr__(self, name):
+        method = getattr(self._inner, name)
+
+        def call(*args, **kwargs):
+            self._on_call(name)
+            return method(*args, **kwargs)
+        return call
+
+
 class LiveTools:
     def __init__(self, history: RedisHistory, payments: PaymentDecisions, knowledge: KnowledgeBase):
         self._history, self._payments, self._knowledge = history, payments, knowledge
