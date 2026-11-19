@@ -312,6 +312,20 @@ thresholds; ≈ 950 with Laya's, whose coverage is 3–12 %).
    stand-ins unless you pass `--p1` / `--p3`. The GIF is rendered from that JSON by `scripts/make_demo_gif.py`.
    Note the cost of the safety net: 3 of the 5 messages, including a vague "Can you help?", are escalated for urgency.
 
+### Langfuse datasets
+
+The golden and hard sets can be loaded into Langfuse Cloud as datasets (`router-golden-v1`, `router-hard-v1`; item input =
+text and language, expected output = route and urgency, metadata = intent, category, `should_escalate`). The upload is
+idempotent (item ids are `<dataset>/<row id>`; golden and hard share the `hc-*` rows, and Langfuse ids are unique per project).
+```bash
+uv run --no-sync python scripts/langfuse_datasets.py                          # needs LANGFUSE_* in .env
+uv run --no-sync python scripts/langfuse_datasets.py --experiment b1 --no-upload --limit 40   # System 1 + policy as an experiment
+```
+Each experiment is a dataset run with per-item traces and the scores `route_correct`, `urgency_correct` and `escalated`, so two
+runs (two models, two threshold sets) can be compared in the UI. A 40-item smoke on `router-hard-v1` ran end to end
+(route_correct 0.475, urgency_correct 0.775, escalated 0.575 on those first 40 items: a smoke, not a result; the full numbers
+are in the evaluation tables above).
+
 ### Full stack
 
 ```bash
@@ -369,7 +383,9 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
    debatable; revert them in `reviews.jsonl` if `general` is the intended label. The golden tables above were measured
    on the 500 **pre-review** labels and are being re-run. The judge κ was measured against an Opus 5.5 reference (not a
    human): 0.30 at best, below the 0.6 gate (see Judge validation). A larger judge behind the gateway is the next lever.
-5. **Langfuse tracing** is implemented (optional) but was not run against Langfuse Cloud (needs keys).
+5. **Langfuse:** System 2 runs are traced in Langfuse Cloud (verified through the observations API), and the golden (497) and
+   hard (394) sets live there as datasets, with System 1 runnable over them as an experiment (see "Langfuse datasets").
+   The annotation queue and the QA-saved percentage are still to do.
 6. **P1/P3 real services:** the adapters are checked against the real P1 and P3 FastAPI apps (`create_app` with in-memory
    stores, served by each repo's own interpreter) in [`tests/contract/`](tests/contract/test_real_p1_p3.py): decisions,
    404, null explanation (found this way and fixed), SSE token/retract/error. It skips when the sibling repos are absent
@@ -377,7 +393,7 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
 8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
    Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub;
-   a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, Langfuse datasets/annotation and
+   a Von/OpenVINO latency comparison (R1b); PII scan (Presidio), semantic (embedding) drift, and the Langfuse annotation queue and
    QA-saved percentage from M7b.
 9. **The surge figure uses the rules model** (`surge_demo.json`): it validates the detector, not SetFit's throughput. The
    `smoke.json` figure is SetFit's.

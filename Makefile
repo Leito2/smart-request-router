@@ -2,7 +2,7 @@
 PROFILE ?= core
 export PYTHONPATH := .:eval:training
 export PYTHONIOENCODING := utf-8
-.PHONY: help doctor setup up down test lint fmt data train calibrate eval eval-full smoke surge-demo
+.PHONY: help doctor setup up down test lint fmt data train calibrate eval eval-full smoke surge-demo langfuse-datasets
 
 help:      ## List targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -29,6 +29,9 @@ smoke:     ## End-to-end System 1 stream (needs `make up`): coverage and p95
 	uv run python scripts/smoke.py
 demo:      ## 5-message demo, no Docker: System 1 + System 2 via the gateway (--no-s2: System 1 only)
 	uv run --no-sync python scripts/demo.py
+
+langfuse-datasets: ## Upload golden + hard to Langfuse Cloud as datasets (needs LANGFUSE_* in .env)
+	uv run --no-sync python scripts/langfuse_datasets.py
 
 surge-demo: ## Inject `payments` x5 and show the surge alert (needs `make up`)
 	uv run python scripts/surge_demo.py
