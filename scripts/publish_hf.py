@@ -43,18 +43,21 @@ tags: [setfit, text-classification, banking, routing]
 
 # Smart Request Router - SetFit System 1 (B1)
 
-Two SetFit models (`intent/` -> 12 routes, `urgency/` -> 0-3) on `paraphrase-multilingual-MiniLM-L12-v2`, trained on the
-dataset above. It is the **System 1** of https://github.com/Leito2/smart-request-router: it answers when confident and
+A SetFit route head (`intent/` -> 12 routes) and an urgency head (`urgency/` -> 0-3: a logistic regression over frozen
+`paraphrase-multilingual-MiniLM-L12-v2` embeddings that predicts the Banking77 intent and maps it to its urgency rule; a
+multi-sentence message is also scored sentence by sentence and the most urgent part wins), trained on the dataset above. It is the **System 1** of https://github.com/Leito2/smart-request-router: it answers when confident and
 escalates otherwise (the escalation policy lives in the repo, `config/policy.setfit.yaml`).
 
-Test split (3,080 rows, no escalation): accuracy 0.778, macro-F1 0.704, urgent recall 0.879. With the escalation policy
-(600-row test sample): selective accuracy 0.920 at 50% coverage, urgent recall 0.956.
+Test split (3,311 rows, no escalation): accuracy 0.767, macro-F1 0.694, urgent recall 0.923. With the escalation policy
+(`policy.yaml`, 600-row test sample): selective accuracy 0.874 at 66% coverage, urgent recall 1.0; golden set (497): 0.883 at
+60%, urgent recall 1.0. System 1 p95 is about 50 ms on CPU.
 
 ## Use
 ```python
 from huggingface_hub import snapshot_download
 path = snapshot_download("{user}/smart-request-router-setfit")
 # then, from the repo: SetFitRouter.load(path)  (routercore.adapters.setfit_model)
+# the urgency head needs scikit-learn, joblib and sentence-transformers (the `ml` group)
 ```
 Limits: English and Spanish only; 12 banking-support routes; Spanish training data is machine translated; urgency labels
 are rule-based from the intent, not human-annotated.

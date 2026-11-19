@@ -1,16 +1,17 @@
 {
   "policy": {
-    "tau": 0.625,
-    "margin": 0.2,
-    "tau_urgent": 0.2179,
-    "max_entropy": 1.01
+    "tau": 0.65,
+    "margin": 0.0,
+    "tau_urgent": 0.1753,
+    "max_entropy": 0.6
   },
-  "coverage": 0.4727,
-  "accuracy": 0.9011,
+  "coverage": 0.6052,
+  "accuracy": 0.9027,
   "target_met": true,
   "target_accuracy": 0.9,
   "min_urgent_recall": 0.98,
   "rows": 1155,
+  "urgent_masses_pooled": 827,
   "model": "setfit",
   "checkpoint": "models/b1_setfit"
 }

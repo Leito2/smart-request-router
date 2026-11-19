@@ -32,9 +32,13 @@ def urgent_mass(urgency_p: dict[str, float]) -> float:
     return urgency_p.get("2", 0.0) + urgency_p.get("3", 0.0)
 
 
-def pick_tau_urgent(records: list[dict], min_recall: float) -> float:
-    """Largest tau_urgent (fewest escalations) that still flags `min_recall` of the urgent rows."""
-    urgent = sorted(urgent_mass(r["urgency_p"]) for r in records if int(r["urgency"]) >= 2)
+def pick_tau_urgent(records: list[dict], min_recall: float, extra_urgent_masses: list[float] = ()) -> float:
+    """Largest tau_urgent (fewest escalations) that still flags `min_recall` of the urgent rows.
+
+    The validation split has under a hundred urgent rows, too few to place a 2 % tail; `extra_urgent_masses`
+    (out-of-fold P(urgent) of the urgent train rows, saved by train_b1.py) pools in ~800 more."""
+    urgent = sorted([urgent_mass(r["urgency_p"]) for r in records if int(r["urgency"]) >= 2]
+                    + list(extra_urgent_masses))
     if not urgent:
         return Policy().tau_urgent
     allowed_misses = int(len(urgent) * (1 - min_recall))
@@ -54,8 +58,9 @@ def evaluate(records: list[dict], pol: Policy) -> tuple[float, float]:
     return accepted / len(records), (correct / accepted if accepted else 0.0)
 
 
-def choose(records: list[dict], *, target_accuracy: float = 0.90, min_urgent_recall: float = 0.98) -> dict:
-    tau_urgent = pick_tau_urgent(records, min_urgent_recall)
+def choose(records: list[dict], *, target_accuracy: float = 0.90, min_urgent_recall: float = 0.98,
+           extra_urgent_masses: list[float] = ()) -> dict:
+    tau_urgent = pick_tau_urgent(records, min_urgent_recall, extra_urgent_masses)
     best: dict | None = None
     curve = []
     for tau, margin, entropy in itertools.product(TAUS, MARGINS, ENTROPIES):
@@ -131,7 +136,12 @@ def main() -> None:
         records = calibrated(raw, calibration)
     else:
         records = raw                       # SetFit's probabilities are used as they come (ECE ~0.03 on val)
-    result = choose(records, target_accuracy=args.target_accuracy, min_urgent_recall=args.min_urgent_recall)
+    oof_file = ROOT / "models" / "b1_setfit" / "urgency" / "oof_urgent_masses.json"
+    use_oof = args.model == "setfit" and oof_file.exists()
+    pooled = json.loads(oof_file.read_text(encoding="utf-8")) if use_oof else []
+    result = choose(records, target_accuracy=args.target_accuracy, min_urgent_recall=args.min_urgent_recall,
+                    extra_urgent_masses=pooled)
+    result["urgent_masses_pooled"] = len(pooled)
     result["model"] = args.model
     result["checkpoint"] = args.checkpoint if args.model == "laya" else "models/b1_setfit"
     suffix = "" if args.model == "laya" else ".setfit"

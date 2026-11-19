@@ -6,14 +6,14 @@
 
 **Headline (measured, 8 GB laptop, no cloud):**
 
-- System 1 (SetFit, plan B) resolves **41–50 %** of messages on its own at **~86–92 % selective accuracy**, p95 **9–11 ms**
-  (offline harness, test / golden sets); the streaming path (Redpanda → Quix → dispatcher, SetFit running in the stream) measures **p50 91 ms / p95 243 ms** end to end.
-- Because only the rest escalates, an LLM is called for **~50–60 %** of messages instead of **100 %** (LLM-only router).
+- System 1 (SetFit, plan B) resolves **53–66 %** of messages on its own (test 66 %, golden 60 %, hard 53 %) at **~87–88 % selective accuracy**
+  on test and golden, p95 **~50 ms** (offline harness); the streaming path (Redpanda → Quix → dispatcher, SetFit running in the stream) measures **p50 91 ms / p95 243 ms** end to end.
+- Because only the rest escalates, an LLM is called for **~34–47 %** of messages instead of **100 %** (LLM-only router).
 - A volume surge on one route (×5) is detected in **14–27 s** (10 s windows; 4 runs, 13.9 / 15.4 / 20.4 / 27.4 s).
 - **The thesis is only half proven.** The decision model the project was built around (Laya), fine-tuned on a 4 GB GPU
-  (last 8 layers + head, 1 epoch), roughly **ties** SetFit on the in-distribution test sample (S1 coverage 54 % vs 50 %,
-  urgent recall 0.978 vs 0.956) but **loses** on the golden and hard sets, on calibration (ECE 0.16 vs 0.03) and on
-  latency (360 ms vs 9 ms); and a 1.7 B/4 B local LLM as System 2 did **not** significantly beat System 1 on the
+  (last 8 layers + head, 1 epoch), does not beat SetFit: on the in-distribution test sample it covers 54 % vs SetFit's 66 % with urgent recall
+  0.978 vs 1.0 (it tied SetFit's earlier few-shot urgency head), and it **loses** on the golden and hard sets, on calibration
+  (ECE 0.16 vs 0.03) and on latency (360 ms vs ~50 ms); and a 1.7 B/4 B local LLM as System 2 did **not** significantly beat System 1 on the
   escalated cases. Details, numbers and what would change them are in [Part IV](#part-iv--proof) and
   [Part VI](#part-vi--reflection).
 
@@ -30,18 +30,20 @@ confident, otherwise it escalates. Files are in [`docs/results/`](docs/results).
 | | Router | Set | Accuracy | Macro-F1 | S1 coverage | Selective acc. | Urgent recall | ECE | p95 latency |
 |---|---|---|---|---|---|---|---|---|---|
 | B0 | Keyword rules | test (3,080) | 0.591 | 0.543 | 1.00 | – | 0.325 | – | 0.06 ms |
-| B1 | SetFit (2 heads), no escalation | test (3,080) | 0.778 | 0.704 | 1.00 | – | 0.879 | – | 79 ms |
-| B1+π | SetFit + policy | test (600) | 0.765 | 0.689 | 0.50 | 0.920 | 0.956 | 0.026 | 9 ms |
-| B1+π | SetFit + policy | golden (497) | 0.749 | 0.730 | 0.41 | 0.867 | 1.000 | 0.034 | 18 ms† |
-| B1+π | SetFit + policy | hard (394) | 0.594 | 0.488 | 0.35 | 0.676 | 0.973 | 0.104 | 18 ms |
+| B1 | SetFit (route head + urgency head v2), no escalation | test (3,311) | 0.767 | 0.694 | 1.00 | – | 0.923 | 0.012 | 41 ms |
+| B1+π | SetFit + policy | test (600) | 0.765 | 0.689 | 0.66 | 0.874 | 1.000 | 0.026 | 50 ms |
+| B1+π | SetFit + policy | golden (497) | 0.749 | 0.730 | 0.60 | 0.883 | 1.000 | 0.034 | 50 ms |
+| B1+π | SetFit + policy | hard (394) | 0.594 | 0.488 | 0.53 | 0.745 | 1.000 | 0.104 | 72 ms |
 | B3+π | Laya, last 8 layers + head fine-tuned (1 epoch) + policy | test (600) | 0.782 | 0.700 | 0.54 | 0.920 | 0.978 | 0.159 | 360 ms |
 | B3+π | same | golden (497) | 0.654 | 0.650 | 0.44 | 0.823 | 0.971 | 0.194 | 399 ms |
 | B3+π | same | hard (394) | 0.485 | 0.430 | 0.42 | 0.606 | 0.865 | 0.282 | 404 ms |
 | B2 | Laya zero-shot (uncalibrated) | golden (497) | 0.419 | 0.392 | 1.00 | – | 0.600 | 0.277 | 398 ms |
 | B4 | LLM only (qwen3:1.7b, local, no thinking) | test (300) | 0.483 | 0.401 | 1.00 | – | 0.286 | – | 718 ms |
 
-† Measured while the machine was busy; SetFit's p95 is 9–11 ms on an idle machine. The golden set was reviewed once by a
-frontier model (497 rows), so golden rows are not comparable with earlier versions of this table. B3+π uses the
+B0 and B4 were measured on the earlier English-only test split (3,080 rows); the current one has 3,311 (231 Spanish rows
+added), which is where B1 was re-run. The B1+π rows use SetFit's urgency head v2 (see "Urgency head" in Part III), measured on the same samples as before: coverage
+was 0.50 / 0.41 / 0.35 and urgent recall 0.956 / 1.0 / 0.973 with the earlier head, p95 9–18 ms. The golden set was reviewed
+once by a frontier model (497 rows), so golden rows are not comparable with earlier versions of this table. B3+π uses the
 thresholds chosen on validation for that checkpoint (`v1-t0.675-m0.3-u0.0-e1.01`).
 
 Escalated cases only: System 2 vs System 1 on the hard set (100 cases, 66 escalated by SetFit's policy; paired
@@ -212,6 +214,30 @@ item, so only urgency was being trained; the default is now 320.
 urgency 0.109 → 0.061. Laya's probabilities stay poorly calibrated (ECE 0.16–0.19 on test/golden), so its thresholds are
 less trustworthy than SetFit's. (For the head-only run calibration had worked: route 0.040 → 0.029.)
 
+**Urgency head (v2).** The first SetFit urgency head was few-shot (16 rows per level, 64 in total) and flagged 31 % of the
+harmless validation messages to reach 98 % urgent recall, so the urgency safety net alone escalated 36 % of all traffic
+(only 8 % of messages are urgent). Urgency is a rule over the Banking77 intent (PLAN §4.2), so the new head
+(`IntentUrgencyHead`, [`setfit_model.py`](packages/routercore/src/routercore/adapters/setfit_model.py)) predicts the 77 intents
+with a logistic regression over frozen sentence embeddings, trained on the whole train split, and sums the probability of the
+intents whose rule is urgent. Two further choices: a message with several sentences is also scored sentence by sentence and
+the most urgent part wins (the five urgent hard cases the first version missed were all "ordinary question. Also, someone stole my
+card"), and `tau_urgent` is placed on the tail of 827 out-of-fold urgent train rows plus the 92 validation ones, because 92 rows
+cannot place a 2 % tail. The route head is untouched (same route answers, same macro-F1).
+
+| Full policy, SetFit | Coverage | Selective acc. | Urgent recall | p95 |
+|---|---|---|---|---|
+| Earlier head, test (3,311) | 0.497 | 0.911 | 0.969 | 5 ms |
+| v2, test (3,311) | **0.650** | 0.891 | **0.996** | 43 ms |
+| Earlier head → v2, golden (497) | 0.41 → **0.60** | 0.867 → 0.883 | 1.0 → 1.0 | 18 → 50 ms |
+| Earlier head → v2, hard (394) | 0.35 → **0.53** | 0.676 → 0.745 | 0.973 → **1.0** | 18 → 72 ms |
+
+The price: on the full test the accepted messages are 2 points less accurate (0.911 → 0.891; the 0.90 target was met on
+validation, not on test) and System 1 is slower (p95 5 → 43 ms, still far under the 300 ms budget). The threshold search
+(`tau`, `margin`, `max_entropy`) also moved. Caveat: I looked at test, golden and hard while choosing between head variants (the
+last picks were fixed on validation and out-of-fold data), so those three are no longer fully untouched.
+Urgent recall under the full policy, by language: test en 0.996 (239/240), es 1.0 (18/18); golden en 1.0 (20), es 1.0 (15);
+hard 1.0 (37, English only). Small Spanish samples: treat them as indicative.
+
 **Thresholds.** [`training/choose_thresholds.py`](training/choose_thresholds.py) picks `tau`, `margin`, `max_entropy` for the
 highest S1 coverage whose accepted messages reach 90 % accuracy on validation, and `tau_urgent` so ≥ 98 % of urgent
 messages escalate. Thresholds belong to a model, so each has its own file (`config/policy.yaml` for Laya,
@@ -221,10 +247,11 @@ messages escalate. Thresholds belong to a model, so each has its own file (`conf
 |---|---|---|
 | Laya (head only, frozen encoder) | **3.4 %** | 0.775 / 0.0 / 0.017 / 0.6 |
 | Laya (last 8 layers, epoch 1) | **51.6 %** | 0.675 / 0.3 / 0.0 / 1.01 |
-| SetFit | **47.3 %** | 0.625 / 0.2 / 0.218 / 1.01 (entropy/OOD rule effectively off: normalized entropy never exceeds 1) |
+| SetFit, few-shot urgency head (earlier) | 47.3 % | 0.625 / 0.2 / 0.218 / 1.01 |
+| SetFit, urgency head v2 (current) | **60.5 %** | 0.65 / 0.0 / 0.175 / 0.6 |
 
-The urgent-recall target (≥ 98 %) is met on validation but not on every evaluation sample: SetFit gets 0.956 on the
-600-row test sample, 0.973 on hard, 1.0 on golden; Laya (8 layers) 0.978, 0.865 and 0.971. Laya's `tau_urgent` is 0.0
+The urgent-recall target (≥ 98 %) is met on validation and on every SetFit evaluation sample with the v2 head (1.0 on the
+600-row test sample, golden and hard; 0.996 on the full test); with the earlier head it was 0.956, 1.0 and 0.973. Laya (8 layers) gets 0.978, 0.971 and 0.865. Laya's `tau_urgent` is 0.0
 because its urgency head outputs exact zeros for the urgent classes on 966 of 1,155 validation rows, so "any urgent mass"
 is the rule that reaches 98 % recall; that is correct but brittle.
 
@@ -245,7 +272,7 @@ recall, ECE, LLM calls and tokens per 1k, and latency percentiles for any router
 **Quality gate.** [`eval/ci_gate.py`](eval/ci_gate.py) (default model: SetFit) runs a 100-case golden subset and fails when macro-F1 drops > 0.01, ECE rises
 > 0.02 or urgent recall < 0.98 ([`config/gates.yaml`](config/gates.yaml)). Verified both ways: it passes on the committed
 baseline and fails with `--degrade 0.3` (macro-F1 −0.22, ECE +0.17). The baseline in `eval/production_metrics.json` is
-SetFit's (macro-F1 0.704, coverage 0.29, urgent recall 1.0, ECE 0.048). GitHub CI runs it in the `quality-gate` job:
+SetFit's (macro-F1 0.704, coverage 0.45, urgent recall 1.0, ECE 0.048). GitHub CI runs it in the `quality-gate` job:
 it downloads the published SetFit model at a pinned revision (`MODEL_REVISION` in `.github/workflows/ci.yml`, versions in
 `.github/gate-requirements.txt`), must reproduce the baseline on Linux (it does: same macro-F1 and ECE as on Windows) and
 must fail when 30 % of predictions are flipped (macro-F1 −0.28, ECE +0.16). Republishing the model means bumping the revision.
@@ -262,7 +289,7 @@ distribution, no labels needed. On the surge-demo traffic (payments ×5) the rou
 the language mix does not (0.21); an Evidently report is in `docs/results/drift_evidently.html`.
 
 **Streaming.** `scripts/smoke.py` (Redpanda + Quix + dispatcher + mocks, 600 messages at 20/s, **SetFit** as System 1,
-[`smoke.json`](docs/results/smoke.json)): 49.6 % routed by System 1 (297 routed, 302 escalated: 186 urgency safety net, 64
+[`smoke.json`](docs/results/smoke.json); measured with the earlier urgency head, to be re-measured with v2): 49.6 % routed by System 1 (297 routed, 302 escalated: 186 urgency safety net, 64
 multi-intent, 52 low confidence), 0 in the dead-letter topic, **p50 91 ms / p95 243 ms** from sent to routed. The plumbing-only
 run with the rules model (78 % routed, p50 51 ms / p95 87 ms) is kept in [`smoke_rules.json`](docs/results/smoke_rules.json).
 Run it on fresh topics: leftover messages or a stale `.quix-state/` from an earlier run inflate the counts (the dispatcher dedupes
@@ -384,9 +411,9 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 
 1. **Laya does not beat SetFit overall**, so the planned acceptance criterion *B3 ≥ B1* is **not met**. With the head only it
    was far behind (macro-F1 0.41 vs 0.69 on test). Training the last 8 layers closes the gap on the in-distribution test sample
-   (macro-F1 0.70 vs 0.69, coverage 54 % vs 50 %, urgent recall 0.978 vs 0.956) but on the golden set it is still behind
-   (accuracy 0.654 vs 0.749, macro-F1 0.650 vs 0.730), on the hard set urgent recall falls to 0.865 (SetFit 0.973), its ECE is
-   5–6× worse and it is 40× slower on a CPU/GPU-poor machine (360 ms vs 9 ms). The remaining levers are the second epoch and a
+   (macro-F1 0.70 vs 0.69, coverage 54 % vs 50 %, urgent recall 0.978 vs 0.956, against SetFit's earlier urgency head; with v2 SetFit is ahead on coverage, 66 %, and urgent recall, 1.0) but on the golden set it is still behind
+   (accuracy 0.654 vs 0.749, macro-F1 0.650 vs 0.730), on the hard set urgent recall falls to 0.865 (SetFit 1.0), its ECE is
+   5–6× worse and it is ~7× slower on a CPU/GPU-poor machine (360 ms vs ~50 ms). The remaining levers are the second epoch and a
    full fine-tune (notebook not run). Until then the working System 1 is SetFit, behind the same port (PLAN risk R1).
 2. **int8 ONNX is not usable** (78–84 % agreement vs a 99.5 % gate); fp32 only.
 3. **System 2 did not significantly beat System 1** with the small local models available (qwen3:1.7b; gemma3:4b below).

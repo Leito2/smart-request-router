@@ -4,12 +4,12 @@
   "macro_f1": 0.7041395918065908,
   "macro_f1_en": 0.7656413031413032,
   "macro_f1_es": 0.5891275391275391,
-  "coverage": 0.29,
-  "selective_accuracy": 0.896551724137931,
+  "coverage": 0.45,
+  "selective_accuracy": 0.8666666666666667,
   "urgent_recall": 1.0,
   "ece": 0.04831228941679001,
   "llm_calls_per_1k": 0.0,
   "tokens_per_1k": 0.0,
-  "latency_p50_ms": 3.9382062495860737,
-  "latency_p95_ms": 16.762493753049057
+  "latency_p50_ms": 24.410962500041933,
+  "latency_p95_ms": 60.11948749983276
 }

@@ -2,18 +2,20 @@
   "router": "b1",
   "set": "test",
   "policy": false,
-  "threshold_set": "v0-placeholder",
-  "rows": 3080,
+  "threshold_set": "v1-t0.65-m0.0-u0.1753-e0.6",
+  "rows": 3311,
   "metrics": {
-    "accuracy": 0.7776,
-    "macro_f1": 0.7036,
+    "accuracy": 0.7668,
+    "macro_f1": 0.6935,
     "macro_f1_en": 0.7036,
+    "macro_f1_es": 0.5639,
     "coverage": 1.0,
-    "selective_accuracy": 0.7776,
-    "urgent_recall": 0.8792,
+    "selective_accuracy": 0.7668,
+    "urgent_recall": 0.9225,
+    "ece": 0.0123,
     "llm_calls_per_1k": 0.0,
     "tokens_per_1k": 0.0,
-    "latency_p50_ms": 26.2735,
-    "latency_p95_ms": 79.1526
+    "latency_p50_ms": 13.4103,
+    "latency_p95_ms": 40.5575
   }
 }

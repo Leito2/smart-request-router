@@ -34,3 +34,11 @@ def test_choose_keeps_confident_correct_rows_and_escalates_the_unsure_wrong_ones
 def test_choose_flags_when_the_target_is_unreachable():
     rows = [record({"a": 0.9, "b": 0.1}, "b") for _ in range(10)]
     assert choose(rows, target_accuracy=0.9)["target_met"] is False
+
+
+def test_tau_urgent_pools_extra_out_of_fold_masses_into_the_tail():
+    few = [record({"a": 1.0, "b": 0.0}, "a", mass, "2") for mass in (0.9, 0.8, 0.7)]    # too few for a tail
+    alone = pick_tau_urgent(few, min_recall=0.98)
+    pooled = pick_tau_urgent(few, min_recall=0.98, extra_urgent_masses=[0.05] * 3 + [0.9] * 97)
+    assert alone > 0.69                      # no allowed misses: below the lowest urgent mass of three rows
+    assert pooled < 0.06                     # 103 rows allow 2 misses: the tail now sits at 0.05
