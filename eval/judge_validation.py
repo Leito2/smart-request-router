@@ -7,7 +7,9 @@ Cohen's kappa >= 0.6, or the judge is only a signal and never evidence.
   python eval/judge_validation.py kappa   compares with docs/judge_validation/reference.jsonl
 
 The reference is written by a frontier model following docs/judge_validation/REVIEW.md (a pause point: the
-author switches model and gets a 5-example summary). Judge env: JUDGE_BASE_URL / JUDGE_MODEL / JUDGE_API_KEY.
+author switches model and gets a 5-example summary). Judge env: JUDGE_BASE_URL / JUDGE_MODEL / JUDGE_API_KEY,
+and optionally JUDGE_MAX_TOKENS (a reasoning judge needs ~1500), JUDGE_MIN_INTERVAL_S and JUDGE_RETRIES
+(free-tier pacing).
 """
 import argparse
 import asyncio
@@ -15,6 +17,7 @@ import json
 import os
 import random
 import sys
+import time
 from pathlib import Path
 
 from judgekit.calibration import cohen_kappa
@@ -87,6 +90,8 @@ def _read(path: Path) -> list[dict]:
 
 
 async def run_judge(cases: list[dict], system: str) -> dict[str, int | None]:
+    from aiohttp import ClientResponseError
+
     from judgekit.clients import ChatClient
 
     async with ChatClient(os.environ.get("JUDGE_BASE_URL", "http://localhost:11434"),
@@ -94,14 +99,26 @@ async def run_judge(cases: list[dict], system: str) -> dict[str, int | None]:
                           api_key=os.environ.get("JUDGE_API_KEY")) as client:
         # one local GPU: letting all 100 requests queue at once makes the slowest exceed the client timeout
         slots = asyncio.Semaphore(int(os.environ.get("JUDGE_CONCURRENCY", "4")))
+        retries = int(os.environ.get("JUDGE_RETRIES", "4"))
+        pause = float(os.environ.get("JUDGE_MIN_INTERVAL_S", "0"))     # seconds between two requests
+        spacing, last = asyncio.Lock(), [0.0]
+        max_tokens = int(os.environ.get("JUDGE_MAX_TOKENS", "80"))      # a reasoning judge needs ~1000
 
         async def one(case: dict) -> tuple[str, int | None]:
             user = json.dumps({"message": case["text"], "routed_to": case["proposed_route"]},
                               ensure_ascii=False)
             messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-            async with slots:
-                done = await client.complete(messages, max_tokens=80)
-            return case["id"], parse_verdict(done.text)
+            for attempt in range(retries):       # a free tier answers 503 when its quota is spent
+                try:
+                    async with slots:
+                        async with spacing:            # stay under the provider's requests per minute
+                            await asyncio.sleep(max(0.0, pause - (time.monotonic() - last[0])))
+                            last[0] = time.monotonic()
+                        done = await client.complete(messages, max_tokens=max_tokens)
+                    return case["id"], parse_verdict(done.text)
+                except ClientResponseError:
+                    await asyncio.sleep(min(10 * (attempt + 1), 60))
+            return case["id"], None
         return dict(await asyncio.gather(*(one(c) for c in cases)))
 
 
@@ -110,10 +127,11 @@ def main() -> None:
     parser.add_argument("step", choices=["build", "judge", "kappa"])
     parser.add_argument("--rubric", type=int, choices=[1, 2, 3], default=2)
     parser.add_argument("--seed", type=int, default=0, help="non-zero = a fresh held-out case set")
+    parser.add_argument("--tag", default="", help="suffix of the judge and report files (the judge model)")
     args = parser.parse_args()
     DIRECTORY.mkdir(parents=True, exist_ok=True)
     cases_path = DIRECTORY / seeded("cases.jsonl", args.seed)
-    judge_path = DIRECTORY / seeded("judge.json", args.seed)
+    judge_path = DIRECTORY / seeded(f"judge{'_' + args.tag if args.tag else ''}.json", args.seed)
     reference_path = DIRECTORY / seeded("reference.jsonl", args.seed)
 
     if args.step == "build":
@@ -139,8 +157,8 @@ def main() -> None:
     else:
         reference = {r["id"]: int(r["acceptable"]) for r in _read(reference_path)}
         report = agreement(json.loads(judge_path.read_text(encoding="utf-8")), reference)
-        (ROOT / "docs" / "results" / "judge_kappa.json").write_text(json.dumps(report, indent=2) + "\n",
-                                                                    encoding="utf-8")
+        report_path = ROOT / "docs" / "results" / f"judge_kappa{'_' + args.tag if args.tag else ''}.json"
+        report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(report, indent=2))
         sys.exit(0 if report["usable"] else 1)
 

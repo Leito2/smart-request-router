@@ -64,6 +64,14 @@ S1 0.549 → S2 0.282 (−26.7 pp, CI [−32.9, −20.4]), but **65 % of them fe
 (429s, then the gateway's breaker) made the run wait ≈ 2.4 h in quotas and give up on the rest. It is **not** a quality
 result either. The 5-message demo, which fits the quota, shows the model deciding well (`make demo`, Part V).
 
+**gpt-oss-120b, second run** (SetFit v2 policy, `--no-tools`, full hard set, 186 escalated;
+[`b5-b1-hard-notools-gpt-oss-120b-v2.json`](docs/results/b5-b1-hard-notools-gpt-oss-120b-v2.json)): accuracy on the escalated rows
+S1 0.425 → S2 0.425 (**+0.0 pp**, CI [−8.6, +8.1], not significant), with 11.8 % of them (22) falling back to `triage` because of
+quota (the quota wait was ≈ 53 min). A fallback counts as wrong, so the S2 figure is slightly pessimistic. End to end the hard
+set reaches accuracy 0.607 (S1 alone 0.594) with 472 LLM calls per 1k messages. Tools are mocks in this harness, so the tool-using
+variant was not run on the full set; the question "does a strong model beat System 1 on its uncertain cases" has now an answer on
+this data: **no measurable gain**, at ~0.47 LLM calls per message.
+
 gemma3:4b is not a quality result: on a 4 GB GPU it takes ~51 s per case, so 77 % of cases hit the 20 s timeout and
 fall back to the `triage` queue. End to end (qwen3, SetFit policy) the hard set reaches accuracy 0.56 with 660 LLM calls per 1k messages.
 
@@ -284,6 +292,15 @@ review, [`docs/judge_validation/REVIEW.md`](docs/judge_validation/REVIEW.md)) ov
 instruction (accuracy 0.72 / 0.67; errors go both ways, 18 false accepts and 15 false rejects at the strict rubric). So the
 judge is a **signal, never evidence**, as PLAN §5.3 says; reports in `docs/results/judge_kappa*.json`.
 
+A larger judge **passes**: gpt-oss-120b through the gateway (Groq free tier) with the same rubric 2 gets **κ 0.653** (accuracy
+0.83, 100/100 answers parsed; 2 false accepts, 15 false rejects; bootstrap 95 % CI [0.50, 0.80],
+[`judge_kappa_gpt-oss-120b-r2.json`](docs/results/judge_kappa_gpt-oss-120b-r2.json)). Read it with care: one reference model (not a
+human), 100 cases, the lower end of the interval is below the 0.6 gate, and the judge is the same model as the System 2 agent, so
+it should not grade System 2's own answers. The strict rubric 3 left 26 of 100 answers unparsed (the reasoning ate the token
+budget; κ 0.25 counting them as wrong, 0.65 on the 74 parsed), so it is not comparable. A first attempt with Gemma-4 31B (Google
+free tier) failed on infrastructure (503s, breaker open) and produced no result. `eval/judge_validation.py` takes `--tag`, and
+`JUDGE_MAX_TOKENS`, `JUDGE_MIN_INTERVAL_S` and `JUDGE_RETRIES` for free-tier pacing.
+
 **Drift.** PSI on prediction signals (route mix, language mix, confidence, routed/escalated split) against the training
 distribution, no labels needed. On the surge-demo traffic (payments ×5) the route mix drifts (PSI 3.94, threshold 0.25) and
 the language mix does not (0.21); an Evidently report is in `docs/results/drift_evidently.html`.
@@ -434,14 +451,16 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
    5–6× worse and it is ~7× slower on a CPU/GPU-poor machine (360 ms vs ~50 ms). The remaining levers are the second epoch and a
    full fine-tune (notebook not run). Until then the working System 1 is SetFit, behind the same port (PLAN risk R1).
 2. **int8 ONNX is not usable** (78–84 % agreement vs a 99.5 % gate); fp32 only.
-3. **System 2 did not significantly beat System 1** with the small local models available (qwen3:1.7b; gemma3:4b below).
-   The harness, the paired-bootstrap gate and the agent work; a stronger model behind the gateway alias `smart_router` is the experiment to run.
+3. **System 2 did not significantly beat System 1**: not with the small local models (qwen3:1.7b; gemma3:4b below) and not with
+   gpt-oss-120b through the gateway on the full hard set (+0.0 pp, CI [−8.6, +8.1], 12 % quota fallbacks; mock tools, no
+   tools run). The harness, the paired-bootstrap gate and the agent work; the value of System 2 on this data is not shown.
 4. **Golden-set review and judge validation (κ ≥ 0.6).** The golden set got one frontier-model review pass (Claude
    Fable 5.2, `training/golden_set/reviews.jsonl`): 467 ok, 30 fixed, 3 dropped → **497 rows**. It is a single model
    pass, not a human review, and 12 of the fixes (sarcastic hard cases moved from `general` to a specific route) are
    debatable; revert them in `reviews.jsonl` if `general` is the intended label. The golden tables above were measured
    on the 500 **pre-review** labels and are being re-run. The judge κ was measured against an Opus 5.5 reference (not a
-   human): 0.30 at best, below the 0.6 gate (see Judge validation). A larger judge behind the gateway is the next lever.
+   human): 0.30 at best for the local gemma3:4b, below the 0.6 gate; a larger judge (gpt-oss-120b through the gateway) reaches
+   κ 0.65 (95 % CI [0.50, 0.80], n = 100), a pass with a wide margin of error (see Judge validation).
 5. **Langfuse:** System 2 runs are traced in Langfuse Cloud (verified through the observations API), and the golden (497) and
    hard (394) sets live there as datasets, with System 1 runnable over them as an experiment (see "Langfuse datasets").
    The annotation queue and the QA-saved percentage are still to do.
