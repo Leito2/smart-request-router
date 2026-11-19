@@ -1,6 +1,7 @@
 """Stage and publish the dataset and the SetFit System 1 to the Hugging Face Hub (PLAN M9).
 
 Usage: python scripts/publish_hf.py --user WhiteUniversal            # stage only, prints what would go up
+       python scripts/publish_hf.py --user WhiteUniversal --upload --only model --message "..."   # one repo
        python scripts/publish_hf.py --user WhiteUniversal --upload   # create PUBLIC repos and upload
 Upload needs `hf auth login` first.
 Repos: <user>/smart-request-router-dataset, <user>/smart-request-router-setfit and the Space <user>/smart-request-router.
@@ -90,6 +91,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--user", required=True)
     parser.add_argument("--upload", action="store_true", help="create public repos and upload")
+    parser.add_argument("--only", choices=["dataset", "model", "space"], help="upload just this repo")
+    parser.add_argument("--message", default="Initial upload", help="commit message on the Hub")
     parser.add_argument("--space", action="store_true",
                         help="also publish the Gradio Space (the Hub needs a PRO plan for it: HTTP 402 on free accounts)")
     args = parser.parse_args()
@@ -105,11 +108,15 @@ def main() -> None:
         for name, kind, folder in [("smart-request-router-dataset", "dataset", dataset),
                                    ("smart-request-router-setfit", "model", model),
                                    *([("smart-request-router", "space", space)] if args.space else [])]:
+            if args.only and kind != args.only:
+                continue
             repo = f"{args.user}/{name}"
             extra = {"space_sdk": "gradio"} if kind == "space" else {}
             api.create_repo(repo, repo_type=kind, private=False, exist_ok=True, **extra)
+            # a model republished with another urgency head must not keep the old head's files on the Hub
+            stale = {"delete_patterns": ["urgency/*"]} if kind == "model" else {}
             api.upload_folder(folder_path=str(folder), repo_id=repo, repo_type=kind,
-                              commit_message="Initial upload")
+                              commit_message=args.message, **stale)
             prefix = {"dataset": "datasets/", "space": "spaces/", "model": ""}[kind]
             print(f"uploaded https://huggingface.co/{prefix}{repo}")
 

@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MODEL_REPO: WhiteUniversal/smart-request-router-setfit
-      MODEL_REVISION: ef5519be12b4e1f1c36b39c0f634e9601e7f988d
+      MODEL_REVISION: 5dbfdb1b3d510b9f11f6582ff497d8cdd44d53ba
       PYTHONPATH: .:eval:training
       HF_HUB_DISABLE_TELEMETRY: "1"
     steps:
