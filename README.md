@@ -17,7 +17,7 @@
   escalated cases. Details, numbers and what would change them are in [Part IV](#part-iv--proof) and
   [Part VI](#part-vi--reflection).
 
-**Status:** v1.0 candidate. Design in [`PLAN.md`](PLAN.md) (Spanish); the course behind it: *Decision Models — System One AI*.
+**Status:** v1.1 (a working MVP, with its negative results). Design in [`PLAN.md`](PLAN.md) (Spanish); the course behind it: *Decision Models — System One AI*.
 
 ---
 
@@ -479,8 +479,8 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 4. **Golden-set review and judge validation (κ ≥ 0.6).** The golden set got one frontier-model review pass (Claude
    Fable 5.2, `training/golden_set/reviews.jsonl`): 467 ok, 30 fixed, 3 dropped → **497 rows**. It is a single model
    pass, not a human review, and 12 of the fixes (sarcastic hard cases moved from `general` to a specific route) are
-   debatable; revert them in `reviews.jsonl` if `general` is the intended label. The golden tables above were measured
-   on the 500 **pre-review** labels and are being re-run. The judge κ was measured against an Opus 5.5 reference (not a
+   debatable; revert them in `reviews.jsonl` if `general` is the intended label. The golden rows above were re-run on
+   the 497 reviewed rows. The judge κ was measured against an Opus 5.5 reference (not a
    human): 0.30 at best for the local gemma3:4b, below the 0.6 gate; a larger judge (gpt-oss-120b through the gateway) reaches
    κ 0.65 (95 % CI [0.50, 0.80], n = 100), a pass with a wide margin of error (see Judge validation).
 5. **Langfuse:** System 2 runs are traced in Langfuse Cloud (verified through the observations API), and the golden (497) and
