@@ -301,6 +301,28 @@ budget; κ 0.25 counting them as wrong, 0.65 on the 74 parsed), so it is not com
 free tier) failed on infrastructure (503s, breaker open) and produced no result. `eval/judge_validation.py` takes `--tag`, and
 `JUDGE_MAX_TOKENS`, `JUDGE_MIN_INTERVAL_S` and `JUDGE_RETRIES` for free-tier pacing.
 
+**Human review in a Langfuse annotation queue (partial).** [`scripts/langfuse_annotation.py`](scripts/langfuse_annotation.py)
+puts 50 of the 100 judge-validation cases in the Langfuse queue `router-qa` (score `route_acceptable`: acceptable or not
+acceptable; the reviewer does not see the Opus reference or the judge's verdict) and `report` turns the annotations into
+[`docs/results/qa_saved.json`](docs/results/qa_saved.json). The human annotated **9 of the 50 cases, and all 9 were
+`acceptable`**; the other 41 were labelled blind by an Opus 5.5 subagent at medium effort
+([`opus_qa_blind.jsonl`](docs/judge_validation/opus_qa_blind.jsonl)). So this is a partial validation, not a human one:
+- **Review time:** median 102 s per case for the human (mean 110 s, 7 usable gaps between annotations; gaps over 300 s are
+  dropped as breaks). The judge takes 0.75 s per case (median of 171 gateway calls, without the quota waits). Replacing the
+  human pass with the judge would save about 99 % of the review time, but that is only worth anything if the judge's verdicts
+  can be trusted, which is the next point.
+- **Human κ is undefined:** with no `not_acceptable` among the 9 human labels there is no negative class, so κ human vs Opus and
+  human vs judge are 0.0 by construction and mean nothing. On those 9 cases the judge and Opus agree with κ 0.78.
+- **Opus consistency:** the blind Opus 5.5 labels agree with the earlier Opus reference on 35 of 41 cases (κ 0.63); the
+  reference followed the longer review rubric, so the gap is a measure of how much a single model's labels move.
+- **Review only what the judge rejects:** on the 50 mixed labels (9 human + 41 model, κ 0.49 against the reference and 0.42
+  against the judge) the judge rejects 21 cases (42 %) and those include 9 of the 10 wrong routings, so reviewing only the
+  rejected ones would save 58 % of the work and miss 1 error in 10. These numbers depend on the model labels and are not
+  a human result.
+
+Annotating the remaining 41 cases would give a real human κ. Note that the Langfuse SDK still calls the scores API v2, which
+Langfuse Cloud removed on 2026-11-16, so `report` reads the v3 endpoint over HTTP.
+
 **Drift.** PSI on prediction signals (route mix, language mix, confidence, routed/escalated split) against the training
 distribution, no labels needed. On the surge-demo traffic (payments ×5) the route mix drifts (PSI 3.94, threshold 0.25) and
 the language mix does not (0.21); an Evidently report is in `docs/results/drift_evidently.html`.
@@ -339,7 +361,7 @@ by tool and System 2 decisions by route. What the captures show, and what they d
 - The R4 run is small (0.2 msg/s for 200 s, 11 escalations handled, 1.3 tool calls per case, latency p50 about 4 s, p95 about
   9.5 s) and **6 of the 11 ended as fallbacks to triage**, because the free Groq quota behind the gateway opened its breaker
   (`503 all_providers_unavailable`). That is the designed degradation, not a measurement of the agent's quality.
-- There is no human-feedback panel: nothing produces that stream yet (it belongs to the Langfuse annotation queue).
+- There is no human-feedback panel: nothing produces that stream yet (the annotation queue exists now but its labels are not wired into a dashboard).
 
 **Batch evaluation.** `eval/batch_job.py` reads the golden set from a *versioned* S3 bucket and writes a report that cites the
 dataset's `VersionId`, so a number traces back to the exact data (verified against a local S3-compatible server).
@@ -405,7 +427,7 @@ pins). The quality gate still passes on 2.4.6 (checked locally).
 ```bash
 python scripts/doctor.py                     # prerequisites
 uv sync --all-packages --dev                 # + --group services --group ml --group mlops as needed
-uv run pytest -q                             # 195 tests
+uv run pytest -q                             # 199 tests
 uv run ruff check . && uv run lint-imports   # lint + Clean Architecture contracts
 
 make up PROFILE=core                         # Redpanda, Redis, Postgres, topics (all images pinned by digest)
@@ -463,7 +485,8 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
    κ 0.65 (95 % CI [0.50, 0.80], n = 100), a pass with a wide margin of error (see Judge validation).
 5. **Langfuse:** System 2 runs are traced in Langfuse Cloud (verified through the observations API), and the golden (497) and
    hard (394) sets live there as datasets, with System 1 runnable over them as an experiment (see "Langfuse datasets").
-   The annotation queue and the QA-saved percentage are still to do.
+   The annotation queue exists, but only 9 of its 50 cases were annotated by a human (all acceptable); the QA-saved figure
+   is partial (see Judge validation).
 6. **P1/P3 real services:** the adapters are checked against the real P1 and P3 FastAPI apps (`create_app` with in-memory
    stores, served by each repo's own interpreter) in [`tests/contract/`](tests/contract/test_real_p1_p3.py): decisions,
    404, null explanation (found this way and fixed), SSE token/retract/error. It skips when the sibling repos are absent
@@ -471,8 +494,8 @@ fails when quality drops; mocks that follow the real contracts. Calibration brou
 7. **KFP quality-loop** compiles; its local runner does not work on Windows (see troubleshooting).
 8. **Not done from PLAN:** the Hugging Face Space (built in `space/`, tested locally, but the Hub now requires a PRO plan to host a
    Gradio Space: HTTP 402; `scripts/publish_hf.py --space` publishes it); the Laya checkpoint on the Hub;
-   a Von/OpenVINO latency comparison (R1b); semantic (embedding) drift, and the Langfuse annotation queue and
-   QA-saved percentage from M7b.
+   a Von/OpenVINO latency comparison (R1b); semantic (embedding) drift, and the full human annotation (50 cases) of the
+   queue from M7b: only 9 are done.
 9. **The surge figure uses the rules model** (`surge_demo.json`): it validates the detector, not SetFit's throughput. The
    `smoke.json` figure is SetFit's.
 

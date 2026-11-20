@@ -1,0 +1,31 @@
+{
+  "n": 9,
+  "human_not_acceptable": 0,
+  "kappa_human_vs_opus": 0.0,
+  "kappa_human_vs_judge": 0.0,
+  "kappa_judge_vs_opus_same_cases": 0.7805,
+  "human_seconds_per_case_median": 102.0,
+  "human_seconds_per_case_mean": 109.7,
+  "gaps_used": 7,
+  "judge_seconds_per_case": 0.75,
+  "qa_time_saved_pct": 99.3,
+  "review_only_judge_rejected": {
+    "share_of_cases_reviewed": 0.556,
+    "real_errors_caught": "0/0",
+    "time_saved_pct": 44.4
+  },
+  "human_plus_model_labels": {
+    "n": 50,
+    "human": 9,
+    "model": 41,
+    "model_labels": "opus-5.5-medium-blind",
+    "kappa_labels_vs_opus_reference": 0.4898,
+    "kappa_labels_vs_judge": 0.4248,
+    "review_only_judge_rejected": {
+      "share_of_cases_reviewed": 0.42,
+      "real_errors_caught": "9/10",
+      "time_saved_pct": 58.0
+    }
+  },
+  "judge": "judge_gpt-oss-120b-r2.json"
+}
