@@ -78,6 +78,11 @@ DASHBOARDS = {
             ("sum(increase(s2_tool_calls_total[1m])) by (tool)", "{{tool}}")], 6, 8, w=18),
         panel(6, "System 2 decisions by route", [
             ("sum(increase(s2_decisions_total[5m])) by (route)", "{{route}}")], 0, 16, w=24),
+        panel(7, "Prompt attacks flagged (monitor, not blocked)", [
+            ("sum(increase(s2_prompt_attack_flagged_total[5m])) by (lang)", "{{lang}}")], 0, 24, w=12),
+        panel(8, "Prompt Guard p95", [
+            ("histogram_quantile(0.95, sum(rate(s2_prompt_guard_seconds_bucket[5m])) by (le))", "p95")],
+            12, 24, unit="s", w=12),
     ]),
 }
 

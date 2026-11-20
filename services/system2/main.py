@@ -2,7 +2,8 @@
 
 It lives outside the dataflow (ADR-1): an agent takes seconds and must not block System 1.
 Concurrency 2, 20 s timeout per case; anything that fails goes to `triage`, nothing is lost.
-Env: BROKER, GATEWAY_URL, GATEWAY_KEY, LLM_MODEL, REDIS_URL, P1_URL, P3_URL.
+Env: BROKER, GATEWAY_URL, GATEWAY_KEY, LLM_MODEL, REDIS_URL, P1_URL, P3_URL,
+PROMPT_GUARD_* (see prompt_guard.py).
 """
 import json
 import logging
@@ -29,6 +30,7 @@ from services.system2.adapters import (
     extra_body_from_env,
 )
 from services.system2.graph import FALLBACK_ROUTE, build_agent
+from services.system2.prompt_guard import from_env as prompt_guard_from_env
 from services.system2.tracing import from_env, trace_run
 
 log = logging.getLogger("system2")
@@ -39,6 +41,10 @@ S2_FALLBACK = Counter("s2_fallback_total", "System 2 decisions that fell back to
 S2_TOKENS = Counter("s2_tokens_total", "LLM tokens spent by System 2")
 S2_TOOL_CALLS = Counter("s2_tool_calls_total", "Agent tool calls (its steps)", ["tool"])
 S2_DECISIONS = Counter("s2_decisions_total", "System 2 decisions by route", ["route"])
+S2_PROMPT_ATTACKS = Counter("s2_prompt_attack_flagged_total",
+                            "Escalations flagged as a prompt attack (monitor: not blocked)", ["lang"])
+S2_PROMPT_GUARD = Histogram("s2_prompt_guard_seconds", "Prompt Guard time per escalation",
+                            buckets=(.05, .1, .2, .5, 1, 2))
 
 
 def fallback(escalation: dict, error: str) -> dict:
@@ -64,6 +70,9 @@ def main() -> None:
         lambda tool: S2_TOOL_CALLS.labels(tool).inc())
     agent = build_agent(llm, tools, routes)
     tracer = from_env()
+    guard = prompt_guard_from_env(
+        ROOT, on_flag=lambda lang: S2_PROMPT_ATTACKS.labels(lang or "unknown").inc(),
+        on_screen=S2_PROMPT_GUARD.observe)
     broker = os.environ.get("BROKER", "localhost:9092")
     consumer = Consumer({"bootstrap.servers": broker, "group.id": "router-system2",
                          "enable.auto.commit": False, "auto.offset.reset": "earliest"})
@@ -73,8 +82,11 @@ def main() -> None:
 
     def resolve(raw: dict) -> dict:
         Escalation.model_validate(raw)
+        message = raw["message"]
+        screened = guard.screen(message["text"], message.get("lang")).as_metadata() if guard else {}
         return trace_run(tracer, "system2.resolve", raw, lambda: agent.invoke({"escalation": raw})["routed"],
-                         metadata=lambda routed: {"route": routed["route"], "priority": routed["priority"]})
+                         metadata=lambda routed: {"route": routed["route"], "priority": routed["priority"],
+                                                  **screened})
 
     while True:
         message = consumer.poll(1.0)
